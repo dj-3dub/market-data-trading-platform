@@ -1,87 +1,214 @@
-
 # Market Data Trading Platform
+
+[![CI](https://github.com/dj-3dub/market-data-trading-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/dj-3dub/market-data-trading-platform/actions/workflows/ci.yml)
 
 A fully containerized microservices project showcasing DevOps engineering skills with Docker, Python, C#, Kafka, Prometheus, Grafana, and Terraform.
 
-This platform simulates a market data feed, strategy engine, and API gateway—instrumented end-to-end with observability tools and streaming infrastructure.
+This platform simulates a small trading system with:
+
+- A **market data service** that publishes streaming price data  
+- A **strategy engine** written in C# that consumes data and exposes metrics  
+- An **API gateway** (FastAPI) that fronts the services  
+- A **web frontend** that visualizes the data  
+- **Kafka** for streaming  
+- **Prometheus + Grafana** for observability  
+- **Terraform** for ECS Fargate infrastructure (designed for offline validation today)
 
 ---
 
-# 🧰 Ops Toolbox
+## 🏗️ Architecture Overview
 
-This project includes a suite of diagnostic and observability tools designed to help troubleshoot performance issues, validate monitoring configurations, and keep the platform running smoothly. These tools demonstrate practical DevOps workflows and can be executed using Makefile shortcuts or direct CLI calls.
+The system is split into several services:
+
+### **market-data-python**
+Python/FastAPI service that simulates market data updates and exposes Prometheus metrics.
+
+### **strategy-csharp**
+C#/.NET 9 service that ingests market data, runs a simple trading strategy, and exports detailed runtime/strategy metrics.
+
+### **api-gateway-python**
+Python/FastAPI API gateway that aggregates data from backend services and provides a unified HTTP interface.
+
+### **web-frontend**
+Web UI (containerized) that displays current market data and strategy outputs.
+
+### **Kafka + Zookeeper**
+Provides the event stream between services (e.g., prices, events).
+
+### **Prometheus + Grafana**
+Full observability stack with metrics scraping and dashboards.
+
+### **Terraform (infra/terraform/envs/aws-fargate)**
+ECS Fargate configuration for running the core services in AWS (cluster, task definitions, services, log group, security group).  
+> Note: The provider is currently set up for *offline validation* (no real AWS creds). Applying this config to AWS would require valid credentials.
+
+Architecture docs:
+
+- `docs/architecture.md`
+- `docs/architecture.dot`
 
 ---
 
-## 🔧 VM Doctor
-A full system health check for your VM. Provides detailed analysis of:
+## 🚀 Running the Stack Locally
 
-- CPU load (per core)
-- RAM availability
-- Swap usage
-- Disk usage & I/O saturation
-- Docker container CPU & memory usage
-- Top processes by memory
-- Summary with OK / WARN / CRIT indicators
+Requirements:
 
-**Run it:**
+- Docker & Docker Compose
+- Git
+
+Clone and start:
+
+```bash
+git clone https://github.com/dj-3dub/market-data-trading-platform.git
+cd market-data-trading-platform
+docker compose up -d
+```
+
+Services:
+
+- Web UI: `http://<host>:8080`
+- API Gateway: `http://<host>:8000`
+- Prometheus: `http://<host>:9091`
+- Grafana: `http://<host>:3000` (default: admin/admin)
+
+---
+
+## 🧰 Ops Toolbox
+
+This project includes a suite of diagnostic tools used to operate, troubleshoot, and validate the platform.
+
+---
+
+### 🔧 VM Doctor
+
+Full system health check:
+
+- CPU load  
+- RAM availability  
+- Swap usage  
+- Disk usage  
+- Docker container resource usage  
+- Top processes  
+- OK / WARN / CRIT indicators  
+
+Run:
 
 ```bash
 make doctor-vm
 ```
 
-Script location: `tools/vm-doctor/vm_doctor.sh`
+Located in `tools/vm-doctor/vm_doctor.sh`.
 
 ---
 
-## 📈 Prometheus Doctor
-Validates Prometheus health and metrics ingestion:
+### 📈 Prometheus Doctor
 
-- Confirms Prometheus API availability
-- Lists all activeTargets
-- Verifies `up` status for required jobs
-- Checks presence of key metrics coming from services
-- Detects missing scrape jobs or misconfigured exporters
+Checks Prometheus health and target ingestion:
 
-**Run it:**
+- API availability  
+- Active targets  
+- `up` status  
+- Missing metrics  
+- Missing scrape jobs  
+
+Run:
 
 ```bash
 python3 tools/prometheus-doctor/prometheus_doctor.py
 ```
 
-Script location: `tools/prometheus-doctor/prometheus_doctor.py`
+Located in `tools/prometheus-doctor/prometheus_doctor.py`.
 
 ---
 
-## 🟦 .NET Doctor
-Used to troubleshoot .NET SDK issues inside Docker or the VM environment:
+### 🟦 .NET Doctor (planned)
 
-- Validates .NET installation
-- Checks workloads & SDKs
-- Detects missing runtime packs
-- Prints actionable error messages
+Will diagnose .NET SDK environments, workloads, runtimes, and container builds.
 
-**Run it:**
+---
 
-```bash
-dotnet run --project tools/dotnet-doctor
+### 🐳 Future Tools
+
+- Docker health/liveness probe tester  
+- Port readiness validator  
+- API smoke-test suite  
+
+---
+
+## 🚦 CI/CD Pipeline
+
+A GitHub Actions workflow validates the entire platform on every push and PR.
+
+### Pipeline includes:
+
+### **Docker Build Validation**
+Builds:
+
+- `market-data-python`
+- `api-gateway-python`
+- `web-frontend`
+
+### **.NET Strategy Engine Build**
+Restores & compiles `.NET 9` C# code.
+
+### **Terraform Validation**
+Runs:
+
+- `terraform fmt -check`
+- `terraform validate`  
+  (offline mode; no real AWS credentials required)
+
+Workflow file:
+
+```
+.github/workflows/ci.yml
 ```
 
 ---
 
-## 🐳 Container Health Tools (coming soon)
-Future additions will include:
+## 🧱 Project Layout
 
-- Docker health probe tester
-- Port and readiness probe validator
-- API smoke test suite
+```
+services/
+  market-data-python/
+  api-gateway-python/
+  strategy-csharp/
+  web-frontend/
+
+monitoring/
+  prometheus/
+  grafana/
+
+infra/
+  terraform/
+    envs/
+      aws-fargate/
+
+tools/
+  vm-doctor/
+  prometheus-doctor/
+
+docs/
+  architecture.md
+  architecture.dot
+
+docker-compose.yml
+Makefile
+README.md
+```
 
 ---
 
-## Summary
+## 🔮 Future Improvements
 
-These tools provide a real-world operational toolkit similar to what engineers use when supporting production microservices. They’re especially valuable for:
+- Unit/integration tests (Python + C#)  
+- Terraform expansion (ALB, Route 53, Secrets Manager)  
+- Grafana alerting  
+- Additional exporters  
+- CI test matrix  
 
-- Home lab reliability
-- CI/CD validation
-- Demonstrating DevOps troubleshooting workflows
+---
+
+## 📄 License
+
+MIT or Apache 2.0 (optional — choose if you add one)
