@@ -17,6 +17,10 @@ This platform simulates a small trading system with:
 ---
 
 ## 🏗️ Architecture Overview
+# Architecture
+
+![Market Data Trading Platform Architecture](architecture.png)
+
 
 The system is split into several services:
 
