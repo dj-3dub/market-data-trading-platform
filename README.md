@@ -16,40 +16,129 @@ This platform simulates a small trading system with:
 
 ---
 
-## 🏗️ Architecture Overview
 # Architecture
 
 ![Market Data Trading Platform Architecture](architecture.png)
 
+This project simulates a small trading platform built with a microservices and DevOps-first mindset. It’s designed to showcase:
 
-The system is split into several services:
+- Containerized application services (Python, C#)
+- Event streaming with Kafka
+- Observability with Prometheus + Grafana
+- Infrastructure as Code with Terraform (ECS Fargate)
 
-### **market-data-python**
-Python/FastAPI service that simulates market data updates and exposes Prometheus metrics.
+## Components
 
-### **strategy-csharp**
-C#/.NET 9 service that ingests market data, runs a simple trading strategy, and exports detailed runtime/strategy metrics.
+### 1. Client Layer
 
-### **api-gateway-python**
-Python/FastAPI API gateway that aggregates data from backend services and provides a unified HTTP interface.
+- **Web Frontend (`web-frontend`)**
+  - Containerized web UI
+  - Talks to the API Gateway for all backend data
+  - Exposes HTTP on port 80 inside the container (mapped to `8080` on the host)
 
-### **web-frontend**
-Web UI (containerized) that displays current market data and strategy outputs.
+### 2. API Layer
 
-### **Kafka + Zookeeper**
-Provides the event stream between services (e.g., prices, events).
+- **API Gateway (`api-gateway-python`)**
+  - FastAPI service
+  - Aggregates data from:
+    - `market-data-python`
+    - `strategy-csharp`
+  - Provides a clean JSON API to the frontend
+  - Exposes HTTP on port 8000
 
-### **Prometheus + Grafana**
-Full observability stack with metrics scraping and dashboards.
+### 3. Services Layer
 
-### **Terraform (infra/terraform/envs/aws-fargate)**
-ECS Fargate configuration for running the core services in AWS (cluster, task definitions, services, log group, security group).  
-> Note: The provider is currently set up for *offline validation* (no real AWS creds). Applying this config to AWS would require valid credentials.
+- **Market Data Service (`market-data-python`)**
+  - Simulates streaming price updates
+  - Publishes events to Kafka
+  - Exposes Prometheus metrics (e.g. last price, update rate)
 
-Architecture docs:
+- **Strategy Engine (`strategy-csharp`)**
+  - C#/.NET 9 service
+  - Consumes market data (via HTTP and/or Kafka)
+  - Runs a simple trading strategy
+  - Exposes detailed metrics via `/metrics` (Prometheus format)
 
-- `docs/architecture.md`
-- `docs/architecture.dot`
+### 4. Messaging Layer
+
+- **Zookeeper (`mdp-zookeeper`)**
+  - Coordinates Kafka brokers
+
+- **Kafka (`mdp-kafka`)**
+  - Event bus for market data and strategy-related events
+  - Used to demonstrate streaming integration in a trading-style system
+
+### 5. Observability Layer
+
+- **Prometheus (`mdp-prometheus`)**
+  - Scrapes metrics from:
+    - `market-data-python`
+    - `strategy-csharp`
+    - Any future exporters
+  - Configured via `monitoring/prometheus/prometheus.yml`
+  - Exposes the Prometheus UI/API on port 9090 (host-mapped to `9091`)
+
+- **Grafana (`mdp-grafana`)**
+  - Reads from Prometheus as a datasource
+  - Dashboards provisioned from `monitoring/grafana/provisioning`
+  - Used to visualize:
+    - Market prices
+    - Strategy metrics
+    - Service health
+
+### 6. Infrastructure as Code
+
+- **Terraform (`infra/terraform/envs/aws-fargate`)**
+  - Defines:
+    - ECS cluster
+    - Fargate task definitions
+    - Services
+    - Security group(s)
+    - CloudWatch log group
+  - Designed to be run in validation mode locally (no real apply in CI)
+  - Can be pointed at a real AWS account by updating the provider and credentials
+
+## Data Flow (High Level)
+
+1. `market-data-python` generates simulated price data.
+2. Data is:
+   - Pushed into Kafka topics.
+   - Exposed over HTTP for the API Gateway.
+   - Exported as Prometheus metrics.
+3. `strategy-csharp` consumes market data, runs a strategy, and publishes:
+   - Strategy state / signals
+   - Metrics for Prometheus.
+4. `api-gateway-python` aggregates data from:
+   - `market-data-python`
+   - `strategy-csharp`
+5. `web-frontend` calls the API Gateway to render a trading-style UI.
+6. Prometheus scrapes all instrumented services.
+7. Grafana visualizes those metrics on dashboards.
+
+## Deployment Topology
+
+### Local (Docker Compose)
+
+- All services run as Docker containers on a single host.
+- Networking is provided by the `trading-net` Docker network.
+- Ports are published for:
+  - Web UI (8080)
+  - API Gateway (8000)
+  - Prometheus (9091)
+  - Grafana (3000)
+  - Kafka/Kafka UI as configured
+
+### Cloud (Terraform / ECS Fargate)
+
+- Core services (market data, strategy, gateway, frontend) can be deployed as Fargate tasks.
+- Logs are shipped to CloudWatch Logs.
+- Networking is handled via security groups and VPC configuration.
+- Load balancer / DNS can be layered on in future iterations.
+
+---
+
+This architecture doc, paired with the diagram, is meant to be a readable walkthrough for reviewers (hiring managers, engineers) who want to understand the system at a glance.
+
 
 ---
 
