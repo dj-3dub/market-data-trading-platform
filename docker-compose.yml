@@ -1,0 +1,130 @@
+services:
+  market-data:
+    build:
+      context: ./services/market-data-python
+    container_name: mdp-market-data
+    ports:
+      - "7001:7001"
+    environment:
+      - SERVICE_NAME=market-data
+    networks:
+      - trading-net
+
+  strategy-engine:
+    build:
+      context: ./services/strategy-csharp
+    container_name: mdp-strategy-engine
+    depends_on:
+      - market-data
+      - kafka
+    environment:
+      - SERVICE_NAME=strategy-engine
+      - MARKET_DATA_URL=http://market-data:7001
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TICKS_TOPIC=ticks
+    networks:
+      - trading-net
+
+  api-gateway:
+    build:
+      context: ./services/api-gateway-python
+    container_name: mdp-api-gateway
+    depends_on:
+      - market-data
+      - strategy-engine
+    ports:
+      - "8000:8000"
+    environment:
+      - MARKET_DATA_URL=http://market-data:7001
+      - STRATEGY_URL=http://strategy-engine:7002
+    networks:
+      - trading-net
+
+  web-frontend:
+    build:
+      context: ./services/web-frontend
+    container_name: mdp-web-frontend
+    depends_on:
+      - api-gateway
+    ports:
+      - "8080:80"
+    networks:
+      - trading-net
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: mdp-prometheus
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9091:9090"
+    networks:
+      - trading-net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: mdp-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - trading-net
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: mdp-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - trading-net
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: mdp-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - trading-net
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: mdp-kafka-ui
+    depends_on:
+      - kafka
+    ports:
+      - "8081:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    networks:
+      - trading-net
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter
+    container_name: mdp-kafka-exporter
+    depends_on:
+      - kafka
+    command:
+      - "--kafka.server=kafka:9092"
+    ports:
+      - "9308:9308"
+    networks:
+      - trading-net
+
+networks:
+  trading-net:
+    driver: bridge

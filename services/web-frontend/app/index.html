@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Trading Dashboard</title>
+</head>
+<body>
+  <h1>Trading Dashboard (v1)</h1>
+  <button id="refresh">Get Latest Price</button>
+  <pre id="output">Click refresh to fetch price...</pre>
+
+  <script>
+    document.getElementById('refresh').onclick = async () => {
+      const res = await fetch('http://localhost:8000/price');
+      const data = await res.json();
+      document.getElementById('output').textContent = JSON.stringify(data, null, 2);
+    };
+  </script>
+</body>
+</html>

@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  # -----------------------------
+  # 1) Build Docker images (Python + Web)
+  # -----------------------------
+  build-docker:
+    name: Build Docker images
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Market Data (Python)
+      - name: Build market-data-python image
+        run: |
+          docker build \
+            -t mdp-market-data:ci \
+            services/market-data-python
+
+      # API Gateway (Python)
+      - name: Build api-gateway-python image
+        run: |
+          docker build \
+            -t mdp-api-gateway:ci \
+            services/api-gateway-python
+
+      # Web Frontend
+      - name: Build web-frontend image
+        run: |
+          docker build \
+            -t mdp-web-frontend:ci \
+            services/web-frontend
+
+  # -----------------------------
+  # 2) Build C# Strategy Engine
+  # -----------------------------
+  build-dotnet:
+    name: Build C# strategy engine
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore and build StrategyEngine
+        working-directory: services/strategy-csharp/src
+        run: |
+          dotnet restore
+          dotnet build --configuration Release --no-restore
+
+  # -----------------------------
+  # 3) Terraform fmt + validate (aws-fargate env)
+  # -----------------------------
+  terraform-validate:
+    name: Terraform validate (aws-fargate)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: infra/terraform/envs/aws-fargate
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: Terraform fmt (check)
+        run: terraform fmt -check
+
+      - name: Terraform validate
+        run: terraform validate

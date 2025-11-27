@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# .NET
+bin/
+obj/
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+
+# Docker
+*.log
+
+# Misc
+.env
+.vscode/
+.idea/

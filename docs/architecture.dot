@@ -1,0 +1,16 @@
+digraph architecture {
+  rankdir=LR;
+
+  subgraph cluster_services {
+    label="Services";
+    market_data [label="Market Data (Python)"];
+    strategy [label="Strategy Engine (C#)"];
+    api [label="API Gateway (Python)"];
+    web [label="Web Frontend"];
+  }
+
+  market_data -> strategy [label="price ticks"];
+  market_data -> api [label="latest price"];
+  strategy -> api [label="trades (future)"];
+  api -> web [label="REST /price"];
+}
