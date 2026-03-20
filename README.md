@@ -15,6 +15,20 @@ This platform simulates a small trading system with:
 - **Terraform** for ECS Fargate infrastructure (designed for offline validation today)
 
 ---
+## Operational Scenarios Covered
+
+Planned and documented scenarios include:
+
+- Kafka broker outage
+- API gateway latency spike
+- strategy engine health degradation
+- stale data conditions
+- service dependency failures
+- observability blind spots
+
+These scenarios are being documented first in WSL and will later be validated in the homelab with live command output, dashboards, and recovery evidence.
+
+---
 
 # Architecture
 
@@ -290,6 +304,18 @@ Makefile
 README.md
 ```
 
+## Reliability Engineering and Operations Focus
+
+This project is designed not only as a market-data trading platform simulation, but also as an operations and reliability engineering lab. In addition to service architecture and deployment, the repository includes:
+
+- incident writeups
+- recovery runbooks
+- troubleshooting guidance
+- failure-injection planning
+- observability strategy documentation
+
+The goal is to demonstrate how distributed trading-style systems behave under failure, how issues are triaged, and how monitoring and automation can improve resilience over time.
+
 ---
 
 ## 🔮 Future Improvements
@@ -305,3 +331,4 @@ README.md
 ## 📄 License
 
 MIT or Apache 2.0 (optional — choose if you add one)
+
