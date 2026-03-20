@@ -1,0 +1,43 @@
+digraph TradingPlatform {
+    rankdir=LR;
+    compound=true;
+    fontname="Helvetica";
+
+    node [shape=box, style=filled, fontname="Helvetica"];
+
+    subgraph cluster_pipeline {
+        label="Trading Data Pipeline";
+        color=lightblue;
+
+        MarketData [label="Market Data\n(Python Producer)", fillcolor=lightyellow];
+        Kafka [label="Kafka Broker\n(Event Stream)", fillcolor=lightpink];
+        Strategy [label="Strategy Engine\n(C# / .NET)", fillcolor=lightyellow];
+        API [label="API Gateway\n(FastAPI)", fillcolor=lightyellow];
+        Client [label="Client / Consumer", fillcolor=white];
+
+        MarketData -> Kafka [label="Publish\n(latency: producer)"];
+        Kafka -> Strategy [label="Consume\n(latency: lag)"];
+        Strategy -> API [label="Process\n(latency: compute)"];
+        API -> Client [label="Response\n(latency: API)"];
+    }
+
+    subgraph cluster_monitoring {
+        label="Observability Stack";
+        color=lightgrey;
+
+        Prometheus [label="Prometheus\n(Metrics)", fillcolor=lightgreen];
+        Grafana [label="Grafana\n(Dashboards)", fillcolor=lightgreen];
+    }
+
+    MarketData -> Prometheus [style=dashed];
+    Kafka -> Prometheus [style=dashed];
+    Strategy -> Prometheus [style=dashed];
+    API -> Prometheus [style=dashed];
+
+    Prometheus -> Grafana [label="Query"];
+
+    Latency [label="End-to-End Latency\n(Publish → Client)", shape=note, fillcolor=lightgoldenrod];
+
+    MarketData -> Latency [style=invis];
+    Latency -> Client [style=invis];
+}
