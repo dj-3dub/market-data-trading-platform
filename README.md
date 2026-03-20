@@ -4,7 +4,7 @@
 
 A **trading systems reliability lab** designed to simulate market data distribution, service dependencies, latency-sensitive processing, and production incident response in an execution-style environment.
 
-This project focuses on how systems behave under **real-time data flow, failure conditions, and operational pressure** — not just how they are deployed.
+This project is intentionally built to demonstrate **how systems behave under real-time conditions**, not just how they are deployed.
 
 ---
 
@@ -15,9 +15,9 @@ In trading systems:
 - Latency directly impacts execution quality  
 - Stale data introduces financial risk  
 - Silent failures are more dangerous than outages  
-- Recovery speed matters more than uptime metrics  
+- Recovery speed matters more than uptime  
 
-This project is built to model those realities.
+This project models those realities through a simulated pipeline.
 
 ---
 
@@ -48,44 +48,40 @@ All Services → Prometheus → Grafana
 
 ---
 
-## 🔁 Data Flow (Execution-Oriented View)
+## 🔁 Data Flow
 
-1. Market data service publishes price updates  
+1. Market data service publishes simulated price data  
 2. Kafka distributes events asynchronously  
 3. Strategy engine consumes and processes data  
-4. API exposes system state for downstream consumers  
-5. Observability stack tracks latency, throughput, and freshness  
+4. API exposes system state  
+5. Prometheus collects metrics  
+6. Grafana visualizes system health  
 
 ---
 
 ## ⚙️ Core Components
 
 ### Market Data Service (Python)
-- Simulates live market data feed  
-- Publishes events into Kafka  
+Simulates upstream market data feed and publishes to Kafka.
 
 ### Kafka Broker
-- Central event distribution layer  
-- Enables decoupled processing  
+Event streaming backbone enabling decoupled communication.
 
 ### Strategy Engine (C# / .NET)
-- Consumes and processes market data  
-- Produces derived signals and metrics  
+Consumes and processes data, producing signals and metrics.
 
 ### API Gateway (FastAPI)
-- Provides access to system state  
-- Aggregates downstream outputs  
+Provides system visibility and exposes processed data.
 
 ### Observability Stack
-- Prometheus for metrics  
-- Grafana for visualization  
+Prometheus (metrics) and Grafana (dashboards).
 
 ---
 
 ## 🚨 Failure Scenarios
 
 - Kafka broker outage  
-- Consumer lag and backlog  
+- Consumer lag / backlog  
 - Strategy engine degradation  
 - API latency spikes  
 - Stale data conditions  
@@ -95,7 +91,7 @@ All Services → Prometheus → Grafana
 
 ## 🔍 Observability Strategy
 
-Key signals:
+Key signals tracked:
 
 - End-to-end latency  
 - Message throughput  
@@ -118,62 +114,81 @@ Key signals:
 
 ## 📂 Project Structure
 
+```text
 .
-├── api/
-├── strategy/
-├── market-data/
-├── monitoring/
-├── infra/
-├── tools/
-├── docs/
-├── scripts/
-└── docker-compose.yml
+├── .github/        # CI/CD workflows
+├── docs/           # Architecture, operations, incidents, testing, resume
+├── infra/          # Terraform (AWS ECS/Fargate)
+├── monitoring/     # Prometheus + Grafana configuration
+├── scripts/        # Helper and diagnostic scripts
+├── services/       # Core application services (market data, strategy, API)
+├── tools/          # Kafka utilities and supporting tools
+├── .gitignore
+├── docker-compose.yml
+├── Makefile
+└── README.md
+```
+
+The `services/` directory contains the application components used to simulate a trading-style execution environment.
 
 ---
 
 ## ▶️ Running Locally
 
+```bash
 docker compose up --build
+```
 
-API → http://localhost:8000  
-Prometheus → http://localhost:9090  
-Grafana → http://localhost:3000  
+Access:
+
+- API → http://localhost:8000  
+- Prometheus → http://localhost:9090  
+- Grafana → http://localhost:3000  
 
 ---
 
 ## ☁️ Infrastructure
 
-Terraform configs included for AWS ECS Fargate.
+Terraform configurations are included for AWS ECS Fargate deployment.
+
+```bash
+cd infra
+terraform init
+terraform apply
+```
 
 ---
 
 ## 🧪 Reliability Engineering Focus
 
+This project is designed to explore:
+
 - System behavior under failure  
 - Dependency-aware debugging  
-- Latency analysis  
+- Latency and data flow analysis  
 - Recovery workflows  
 
 ---
 
 ## 🧭 Roadmap
 
-- Latency metrics  
-- Kafka lag dashboards  
+- Latency instrumentation across services  
+- Kafka consumer lag dashboards  
 - Synthetic health checks  
-- Failure injection  
-- Network degradation testing  
-- Distributed tracing  
+- Failure injection scripts  
+- Network degradation simulation  
+- Distributed tracing (OpenTelemetry)  
 
 ---
 
 ## 💬 Interview Positioning
 
-Built a simulated market data platform to model real-time data flow, system dependencies, and failure scenarios — focusing on latency, observability, and recovery.
+Built a simulated market data platform to model real-time data flow, system dependencies, and failure scenarios — focusing on latency, observability, and recovery in trading-style systems.
 
 ---
 
 ## 📌 Author
 
 Tim Heverin  
+Infrastructure / Platform Engineering  
 Chicago, IL
