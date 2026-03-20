@@ -4,6 +4,8 @@
 
 A **trading systems reliability lab** designed to simulate market data distribution, service dependencies, latency-sensitive processing, and production incident response in an execution-style environment.
 
+This project is designed to mirror the operational challenges of low-latency trading systems, where data timeliness, system coordination, and rapid failure recovery directly impact outcomes.
+
 This project is intentionally built to demonstrate **how systems behave under real-time conditions**, not just how they are deployed.
 
 ---
@@ -112,6 +114,31 @@ Key signals tracked:
 
 ---
 
+## 📊 Observability
+
+Observability is treated as a first-class component of the system.
+
+Dashboards and datasources are provisioned via code to ensure:
+- reproducibility across environments  
+- zero manual configuration  
+- consistent visibility into system behavior  
+
+Key metrics visualized:
+- End-to-end latency (p50 / p95 / p99)  
+- Kafka consumer lag  
+- Message throughput  
+- Strategy processing time  
+- API latency  
+- Data freshness  
+- Error rates  
+- Service restart frequency  
+
+Dashboards are located in:
+
+monitoring/grafana/dashboards/
+
+---
+
 ## 📂 Project Structure
 
 ```text
@@ -121,7 +148,7 @@ Key signals tracked:
 ├── infra/          # Terraform (AWS ECS/Fargate)
 ├── monitoring/     # Prometheus + Grafana configuration
 ├── scripts/        # Helper and diagnostic scripts
-├── services/       # Core application services (market data, strategy, API)
+├── services/       # Core application services (market data, strategy, API, frontend)
 ├── tools/          # Kafka utilities and supporting tools
 ├── .gitignore
 ├── docker-compose.yml
@@ -142,7 +169,8 @@ docker compose up --build
 Access:
 
 - API → http://localhost:8000  
-- Prometheus → http://localhost:9090  
+- Web UI → http://localhost:8080  
+- Prometheus → http://localhost:9091  
 - Grafana → http://localhost:3000  
 
 ---
@@ -181,9 +209,11 @@ This project is designed to explore:
 
 ---
 
-## 💬 Interview Positioning
+## 🧠 Design Philosophy
 
-Built a simulated market data platform to model real-time data flow, system dependencies, and failure scenarios — focusing on latency, observability, and recovery in trading-style systems.
+This project emphasizes understanding system behavior under real-world conditions, including latency sensitivity, partial failures, and recovery workflows.
+
+The goal is not just to deploy services, but to observe, debug, and improve them under stress.
 
 ---
 
@@ -191,4 +221,5 @@ Built a simulated market data platform to model real-time data flow, system depe
 
 Tim Heverin  
 Infrastructure / Platform Engineering  
-Chicago, IL
+Chicago, IL  
+
