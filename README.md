@@ -4,22 +4,18 @@
 
 A **trading systems reliability lab** designed to simulate market data distribution, service dependencies, latency-sensitive processing, and production incident response in an execution-style environment.
 
-This project is designed to mirror the operational challenges of low-latency trading systems, where data timeliness, system coordination, and rapid failure recovery directly impact outcomes.
-
-This project is intentionally built to demonstrate **how systems behave under real-time conditions**, not just how they are deployed.
+The goal is to model how systems behave under real-time conditions — including latency sensitivity, partial failure, and recovery — rather than simply how they are deployed.
 
 ---
 
-## ⚡ Why This Matters (Trading Context)
-
-In trading systems:
+## Trading System Characteristics
 
 - Latency directly impacts execution quality  
 - Stale data introduces financial risk  
 - Silent failures are more dangerous than outages  
 - Recovery speed matters more than uptime  
 
-This project models those realities through a simulated pipeline.
+This project models these constraints through a simulated data pipeline and observable system behavior.
 
 ---
 
@@ -133,9 +129,8 @@ Key metrics visualized:
 - Error rates  
 - Service restart frequency  
 
-Dashboards are located in:
-
-monitoring/grafana/dashboards/
+Dashboards are defined in:
+`monitoring/grafana/dashboards/`
 
 ---
 
