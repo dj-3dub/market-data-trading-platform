@@ -23,7 +23,7 @@ This project models these constraints through a simulated data pipeline and obse
 
 This repository demonstrates:
 
-- Event-driven market data pipelines  
+- Event-driven market data ingestion and processing
 - Service dependency awareness under failure  
 - Observability of real-time data flow  
 - Detection of stale or degraded system states  
@@ -49,7 +49,7 @@ All Services → Prometheus → Grafana
 ## 🔁 Data Flow
 
 1. Market data service publishes simulated price data  
-2. Kafka distributes events asynchronously  
+2. Kafka distributes events across consumers, enabling decoupled processing
 3. Strategy engine consumes and processes data  
 4. API exposes system state  
 5. Prometheus collects metrics  
