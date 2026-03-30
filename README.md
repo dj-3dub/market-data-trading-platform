@@ -143,6 +143,16 @@ Key signals tracked:
 
 ---
 
+## 📄 Incident Reports
+
+Detailed incident simulations and response workflows:
+
+- [Kafka Consumer Lag](docs/incidents/kafka-lag.md)
+- [Service Crash](docs/incidents/service-crash.md)
+- [Latency Spike](docs/incidents/latency-spike.md)
+
+---
+
 ## 📊 Observability
 
 Observability is treated as a first-class component of the system.
