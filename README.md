@@ -2,7 +2,9 @@
 
 [![CI](https://github.com/dj-3dub/market-data-trading-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/dj-3dub/market-data-trading-platform/actions/workflows/ci.yml)
 
-A **trading systems reliability lab** designed to simulate market data distribution, service dependencies, latency-sensitive processing, and production incident response in an execution-style environment.
+A **trading systems reliability and support lab** designed to simulate market data distribution, service dependencies, latency-sensitive processing, and real-world production incident response in an execution-style environment.
+
+This project focuses on the **operational realities of supporting live trading systems**, including monitoring, alerting, troubleshooting, and recovery under time-sensitive conditions.
 
 The goal is to model how systems behave under real-time conditions — including latency sensitivity, partial failure, and recovery — rather than simply how they are deployed.
 
@@ -27,7 +29,7 @@ This repository demonstrates:
 - Service dependency awareness under failure  
 - Observability of real-time data flow  
 - Detection of stale or degraded system states  
-- Incident triage and recovery workflows  
+- Production incident triage, troubleshooting, and recovery workflows under latency-sensitive conditions
 - Infrastructure automation and reproducibility  
 
 ---
@@ -60,7 +62,10 @@ All Services → Prometheus → Grafana
 ## ⚙️ Core Components
 
 ### Market Data Service (Python)
-Simulates upstream market data feed and publishes to Kafka.
+Simulates upstream market data feed and includes basic automation for:
+- data publishing
+- service health validation
+- failure simulation
 
 ### Kafka Broker
 Event streaming backbone enabling decoupled communication.
@@ -76,7 +81,9 @@ Prometheus (metrics) and Grafana (dashboards).
 
 ---
 
-## 🚨 Failure Scenarios
+## 🚨 Failure Scenarios & Support Simulation
+
+The following failure scenarios are intentionally introduced to simulate real-world production incidents:
 
 - Kafka broker outage  
 - Consumer lag / backlog  
@@ -85,7 +92,33 @@ Prometheus (metrics) and Grafana (dashboards).
 - Stale data conditions  
 - Partial system failure  
 
+Each scenario is paired with:
+- Detection via monitoring and alerting  
+- Investigation using logs, metrics, and system tools  
+- Recovery actions to restore service  
+
 ---
+
+## 🧯 Incident Response Workflows
+
+This project models real-world incident response workflows expected in trading system support roles.
+
+### Example: Consumer Lag Incident
+
+**Detection**
+- Grafana alert triggered for increased Kafka consumer lag  
+
+**Investigation**
+- Checked consumer group offsets  
+- Reviewed service logs for processing delays  
+- Verified system resource utilization  
+
+**Resolution**
+- Restarted affected consumer  
+- Scaled additional instances to handle backlog  
+
+**Outcome**
+- Lag reduced and message flow normalized  
 
 ## 🔍 Observability Strategy
 
@@ -134,6 +167,17 @@ Dashboards are defined in:
 
 ---
 
+## 🕒 Simulated On-Call Workflow
+
+This lab models the workflow of a trading systems support engineer:
+
+1. Alert triggered (latency, lag, or failure)  
+2. Investigate using dashboards, logs, and system tools  
+3. Identify root cause  
+4. Execute recovery (restart, scale, isolate)  
+5. Validate system stability  
+6. Document incident and preventative improvements  
+
 ## 📂 Project Structure
 
 ```text
@@ -152,6 +196,17 @@ Dashboards are defined in:
 ```
 
 The `services/` directory contains the application components used to simulate a trading-style execution environment.
+
+---
+
+## 🐧 Linux-Based Troubleshooting
+
+Operational troubleshooting is performed using standard Linux tools:
+
+- Process inspection (`ps`, `top`, `htop`)
+- Network diagnostics (`ss`, `netstat`, `lsof`)
+- Log analysis (`journalctl`, application logs)
+- Service management (`systemctl`)
 
 ---
 
