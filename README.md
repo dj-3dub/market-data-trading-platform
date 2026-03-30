@@ -61,11 +61,17 @@ All Services → Prometheus → Grafana
 
 ## ⚙️ Core Components
 
-### Market Data Service (Python)
-Simulates upstream market data feed and includes basic automation for:
-- data publishing
-- service health validation
-- failure simulation
+### Python Automation & Monitoring Scripts
+
+Python is used for lightweight operational tooling, including:
+
+- Service health checks  
+- Latency monitoring  
+- Kafka lag simulation and alerting  
+- Failure detection automation  
+
+Scripts are located in:
+`scripts/`
 
 ### Kafka Broker
 Event streaming backbone enabling decoupled communication.
