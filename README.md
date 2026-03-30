@@ -6,7 +6,7 @@ A **trading systems reliability and support lab** designed to simulate market da
 
 This project focuses on the **operational realities of supporting live trading systems**, including monitoring, alerting, troubleshooting, and recovery under time-sensitive conditions.
 
-The goal is to model how systems behave under real-time conditions — including latency sensitivity, partial failure, and recovery — rather than simply how they are deployed.
+The goal is to model how systems behave under real-time conditions  including latency sensitivity, partial failure, and recovery  rather than simply how they are deployed.
 
 ---
 
