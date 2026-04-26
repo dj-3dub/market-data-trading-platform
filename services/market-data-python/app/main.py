@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from prometheus_client import Counter, Histogram, generate_latest
 from random import random
-from time import time
+import time
 from fastapi.responses import PlainTextResponse
 from kafka import KafkaProducer
 import json
@@ -43,20 +43,22 @@ def startup_event():
 @app.get("/tick")
 def get_price_tick(symbol: str = "FAKE"):
     global LAST_PRICE
-    start = time()
+    start = time.time()
 
     # simple random walk
     change = (random() - 0.5) * 0.5
     LAST_PRICE = max(1.0, LAST_PRICE + change)
 
     price_tick_counter.inc()
-    price_latency_hist.observe(time() - start)
-
+    price_latency_hist.observe(time.time() - start)
     payload = {
         "symbol": symbol,
         "price": round(LAST_PRICE, 4),
         "source": "market-data-python",
+        "timestamp": time.time(),
     }
+
+    print(payload)
 
     # Fire-and-forget send to Kafka
     p = get_producer()
