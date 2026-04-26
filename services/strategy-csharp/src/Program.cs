@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using System.Text.Json;
 using Confluent.Kafka;
 using Prometheus;
@@ -33,12 +32,17 @@ var lastTickAgeGauge = Metrics.CreateGauge(
     name: "strategy_last_tick_age_seconds",
     help: "Age in seconds of the last processed tick");
 
+var tickLatencyHistogram = Metrics.CreateHistogram(
+    name: "strategy_tick_latency_seconds",
+    help: "End-to-end latency from market data generation to strategy engine processing");
+
 // ---- Shared state for health ----
 double lastPrice = 0.0;
 double previousPrice = 0.0;
 string lastSymbol = "FAKE";
 string lastSource = "market-data-python";
 DateTime lastTickTime = DateTime.MinValue;
+double lastLatencySeconds = 0.0;
 
 // Kafka config
 var kafkaBootstrap = Environment.GetEnvironmentVariable("KAFKA_BOOTSTRAP_SERVERS") ?? "kafka:9092";
@@ -74,6 +78,7 @@ _ = Task.Run(() =>
                 var json = cr.Message.Value;
 
                 var tick = JsonSerializer.Deserialize<Tick>(json);
+
                 if (tick is not null)
                 {
                     tickCounter.Inc();
@@ -85,13 +90,15 @@ _ = Task.Run(() =>
                     lastTickTime = DateTime.UtcNow;
 
                     lastPriceGauge.Set(lastPrice);
-                    if (lastTickTime != DateTime.MinValue)
-                    {
-                        var ageSeconds = (DateTime.UtcNow - lastTickTime).TotalSeconds;
-                        lastTickAgeGauge.Set(ageSeconds);
-                    }
 
-                    Console.WriteLine($"[TICK-KAFKA] {lastSymbol} {lastPrice}");
+                    var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
+                    var latencySeconds = now - tick.timestamp;
+
+                    lastLatencySeconds = latencySeconds;
+                    tickLatencyHistogram.Observe(latencySeconds);
+                    lastTickAgeGauge.Set(latencySeconds);
+
+                    Console.WriteLine($"[TICK-KAFKA] {lastSymbol} {lastPrice} latency={latencySeconds}s");
 
                     // simple strategy: buy if price is up > 0.1% from previous
                     if (previousPrice > 0.0 && lastPrice > previousPrice * 1.001)
@@ -134,7 +141,8 @@ app.MapGet("/health", () =>
         lastPrice,
         lastSymbol,
         lastSource,
-        lastTickTime
+        lastTickTime,
+        lastLatencySeconds
     };
 
     return Results.Ok(status);
@@ -152,4 +160,4 @@ app.Lifetime.ApplicationStopping.Register(() => cts.Cancel());
 // Listen on port 7002 inside the container
 await app.RunAsync("http://0.0.0.0:7002");
 
-public record Tick(string symbol, double price, string source);
+public record Tick(string symbol, double price, string source, double timestamp);
