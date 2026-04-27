@@ -26,8 +26,9 @@ This project models these constraints through a simulated data pipeline and obse
 This repository demonstrates:
 
 - Event-driven market data ingestion and processing
+- **End-to-end latency measurement and monitoring** from data generation to processing
 - Service dependency awareness under failure  
-- Observability of real-time data flow  
+- Observability of real-time data flow with latency percentiles
 - Detection of stale or degraded system states  
 - Production incident triage, troubleshooting, and recovery workflows under latency-sensitive conditions
 - Infrastructure automation and reproducibility  
@@ -78,12 +79,12 @@ This system models latency-sensitive event processing where delays in data propa
 
 ## 🔁 Data Flow
 
-1. Market data service publishes simulated price data  
+1. Market data service publishes simulated price data with timestamps
 2. Kafka distributes events across consumers, enabling decoupled processing
-3. Strategy engine consumes and processes data  
-4. API exposes system state  
-5. Prometheus collects metrics  
-6. Grafana visualizes system health  
+3. Strategy engine consumes and processes data, measuring end-to-end latency
+4. API exposes system state and processed data
+5. Prometheus collects comprehensive metrics including latency histograms
+6. Grafana visualizes system health and latency percentiles (p50/p95/p99)  
 
 ---
 
@@ -93,10 +94,10 @@ This system models latency-sensitive event processing where delays in data propa
 
 Python is used for lightweight operational tooling, including:
 
-- Service health checks  
-- Latency monitoring  
-- Kafka lag simulation and alerting  
-- Failure detection automation  
+- Service health checks and validation
+- **End-to-end latency measurement and alerting**
+- Kafka lag detection and monitoring
+- Failure detection automation and incident simulation
 
 Scripts are located in:
 `scripts/`
@@ -111,7 +112,13 @@ Consumes and processes data, producing signals and metrics.
 Provides system visibility and exposes processed data.
 
 ### Observability Stack
-Prometheus (metrics) and Grafana (dashboards).
+Prometheus (metrics collection) and Grafana (visualization dashboards) provide comprehensive monitoring including:
+
+- **End-to-End Latency Tracking**: Real-time measurement from market data generation to strategy processing
+- **Latency Histograms**: `strategy_tick_latency_seconds` with p50/p95/p99 percentiles
+- **Service Health Metrics**: Availability, throughput, and error rates
+- **Kafka Consumer Lag**: Message backlog monitoring
+- **Interactive Dashboards**: Pre-configured Grafana panels for system observability
 
 ---
 
@@ -124,7 +131,62 @@ The following failure scenarios are intentionally introduced to simulate real-wo
 - Strategy engine degradation  
 - API latency spikes  
 - Stale data conditions  
-- Partial system failure  
+- Partial system failure
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Docker and Docker Compose
+- Make (optional, for convenience commands)
+
+### Quick Start
+```bash
+# Clone the repository
+git clone <repository-url>
+cd market-data-trading-platform
+
+# Start the platform
+make up
+
+# Check service health
+make doctor
+
+# View logs
+make logs
+```
+
+### Access Points
+- **Web Frontend**: http://localhost:8080
+- **API Gateway**: http://localhost:8000
+- **Prometheus**: http://localhost:9090
+- **Grafana**: http://localhost:3000 (admin/admin)
+- **Kafka UI**: http://localhost:8081
+
+### Key Metrics to Monitor
+- **End-to-End Latency**: View p50/p95/p99 percentiles in Grafana
+- **Service Health**: All services report OK via health checks
+- **Kafka Lag**: Monitor consumer backlog in real-time
+- **Throughput**: Message processing rates across the pipeline
+
+---
+
+## ✅ Current Implementation Status
+
+### Core Features
+- ✅ **End-to-End Latency Measurement**: Implemented from market data generation to strategy processing
+- ✅ **Real-Time Metrics**: Prometheus histograms with latency percentiles
+- ✅ **Grafana Dashboards**: Pre-configured panels for latency monitoring
+- ✅ **Service Health Checks**: Automated validation of all components
+- ✅ **Docker Compose Deployment**: Full containerized environment
+- ✅ **Incident Documentation**: Comprehensive failure scenario walkthroughs
+
+### Operational Readiness
+- ✅ **All Services Running**: Market data, strategy engine, API gateway, Kafka, monitoring stack
+- ✅ **Health Validation**: Automated checks confirm system stability
+- ✅ **Monitoring Active**: Real-time metrics collection and visualization
+- ✅ **Documentation Complete**: Architecture, operations, and incident response guides  
 
 Each scenario is paired with:
 - Detection via monitoring and alerting  
