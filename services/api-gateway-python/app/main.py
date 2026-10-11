@@ -4,14 +4,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from fastapi.responses import PlainTextResponse
 import time
+import os
+from fastapi.responses import JSONResponse
 
 app = FastAPI(title="Trading API Gateway")
 
-MARKET_DATA_URL = "http://market-data:7001"
+MARKET_DATA_URL = os.getenv("MARKET_DATA_URL", "http://market-data:7001")
+STRATEGY_URL = os.getenv("STRATEGY_URL", "http://strategy-engine:7002")
 
 origins = [
-    "http://localhost:8080",
-    "http://127.0.0.1:8080",
+    "http://localhost:8082",
+    "http://127.0.0.1:8082",
 ]
 
 app.add_middleware(
@@ -35,11 +38,20 @@ REQUEST_LATENCY = Histogram(
     ["endpoint", "method"],
 )
 
+SUCCESS_LATENCY = Histogram(
+    "api_success_duration_seconds", "Latency of successful business requests",
+    ["endpoint"], buckets=(0.05, 0.1, 0.25, 0.5, 1, 2, 3, 5),
+)
+
 UPSTREAM_ERRORS = Counter(
     "api_upstream_errors_total",
     "Total number of upstream (market data / strategy) errors",
     ["upstream"],
 )
+
+for endpoint in ("/price", "/strategy"):
+    for status in ("200", "503"):
+        REQUEST_COUNT.labels(endpoint=endpoint, method="GET", status=status)
 
 
 async def track_request(request: Request, handler, endpoint_name: str):
@@ -54,6 +66,8 @@ async def track_request(request: Request, handler, endpoint_name: str):
         return response
     finally:
         duration = time.perf_counter() - start
+        if 200 <= status_code < 300:
+            SUCCESS_LATENCY.labels(endpoint=endpoint_name).observe(duration)
         REQUEST_LATENCY.labels(endpoint=endpoint_name, method=method).observe(duration)
         REQUEST_COUNT.labels(
             endpoint=endpoint_name,
@@ -66,16 +80,45 @@ async def track_request(request: Request, handler, endpoint_name: str):
 async def get_price(request: Request, symbol: str = "FAKE"):
     async def handler():
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=3) as client:
                 resp = await client.get(f"{MARKET_DATA_URL}/tick", params={"symbol": symbol})
-                resp.raise_for_status()
-                return resp.json()
-        except httpx.HTTPError:
+                payload = resp.json()
+                if resp.status_code >= 500:
+                    UPSTREAM_ERRORS.labels(upstream="market-data").inc()
+                return JSONResponse(payload, status_code=resp.status_code)
+        except (httpx.HTTPError, ValueError):
             UPSTREAM_ERRORS.labels(upstream="market-data").inc()
-            # You could also raise HTTPException here for proper status codes
-            return {"error": "Failed to fetch market data"}
+            return JSONResponse({"error": "Failed to fetch market data"}, status_code=503)
 
     return await track_request(request, handler, endpoint_name="/price")
+
+
+@app.get("/strategy")
+async def strategy(request: Request, symbol: str = "FAKE"):
+    async def handler():
+        try:
+            async with httpx.AsyncClient(timeout=3) as client:
+                resp = await client.get(f"{STRATEGY_URL}/state", params={"symbol": symbol})
+                payload = resp.json()
+                if resp.status_code >= 500:
+                    UPSTREAM_ERRORS.labels(upstream="strategy-engine").inc()
+                return JSONResponse(payload, status_code=resp.status_code)
+        except (httpx.HTTPError, ValueError):
+            UPSTREAM_ERRORS.labels(upstream="strategy-engine").inc()
+            return JSONResponse({"error": "Strategy unavailable"}, status_code=503)
+    return await track_request(request, handler, endpoint_name="/strategy")
+
+
+@app.get("/ready")
+async def ready():
+    try:
+        async with httpx.AsyncClient(timeout=3) as client:
+            for url in (MARKET_DATA_URL, STRATEGY_URL):
+                response = await client.get(f"{url}/ready")
+                response.raise_for_status()
+        return {"status": "ready"}
+    except httpx.HTTPError:
+        return JSONResponse({"status": "degraded"}, status_code=503)
 
 
 @app.get("/health")
@@ -87,3 +130,23 @@ async def health():
 async def metrics():
     data = generate_latest()
     return PlainTextResponse(data, media_type=CONTENT_TYPE_LATEST)
+
+
+@app.get("/integrity")
+async def integrity():
+    try:
+        async with httpx.AsyncClient(timeout=3) as client:
+            response = await client.get(f"{STRATEGY_URL}/integrity")
+            return JSONResponse(response.json(), status_code=response.status_code)
+    except (httpx.HTTPError, ValueError):
+        return JSONResponse({"error": "Integrity state unavailable"}, status_code=503)
+
+
+@app.get("/quarantine")
+async def quarantine(limit: int = 20):
+    try:
+        async with httpx.AsyncClient(timeout=3) as client:
+            response = await client.get(f"{STRATEGY_URL}/quarantine", params={"limit": max(1, min(100, limit))})
+            return JSONResponse(response.json(), status_code=response.status_code)
+    except (httpx.HTTPError, ValueError):
+        return JSONResponse({"error": "Quarantine unavailable"}, status_code=503)

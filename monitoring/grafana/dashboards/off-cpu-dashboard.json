@@ -1,0 +1,160 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(wacker_watch_off_cpu_duration_ns_bucket[5m])) by (le, process_name))",
+          "legendFormat": "p50 - {{process_name}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(wacker_watch_off_cpu_duration_ns_bucket[5m])) by (le, process_name))",
+          "legendFormat": "p95 - {{process_name}}",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(wacker_watch_off_cpu_duration_ns_bucket[5m])) by (le, process_name))",
+          "legendFormat": "p99 - {{process_name}}",
+          "refId": "C"
+        }
+      ],
+      "title": "Off-CPU percentiles (>50 us, ns)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ns",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": true,
+            "pointSize": 5,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Off-CPU intervals greater than 50 us, grouped by thread comm. Includes intentional sleep, I/O blocking and runnable wait; does not identify scheduler contention."
+    },
+    {
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "topk(10, histogram_quantile(0.99, sum(rate(wacker_watch_off_cpu_duration_ns_bucket[5m])) by (le, process_name)))",
+          "legendFormat": "{{process_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Top thread names by p99 off-CPU duration (ns)",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Off-CPU intervals greater than 50 us, grouped by thread comm. Includes intentional sleep, I/O blocking and runnable wait; does not identify scheduler contention."
+    },
+    {
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 3,
+      "targets": [
+        {
+          "expr": "sum(rate(wacker_watch_off_cpu_duration_ns_bucket[5m])) by (le)",
+          "refId": "A"
+        }
+      ],
+      "title": "Off-CPU distribution (>50 us)",
+      "type": "heatmap",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Off-CPU intervals greater than 50 us, grouped by thread comm. Includes intentional sleep, I/O blocking and runnable wait; does not identify scheduler contention."
+    },
+    {
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 14
+      },
+      "id": 4,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(wacker_watch_off_cpu_duration_ns_bucket[5m])) by (le))",
+          "refId": "A"
+        }
+      ],
+      "title": "Overall p99 off-CPU duration (ns)",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Off-CPU intervals greater than 50 us, grouped by thread comm. Includes intentional sleep, I/O blocking and runnable wait; does not identify scheduler contention."
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": [
+    "wacker-watch",
+    "ebpf",
+    "observability"
+  ],
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "title": "Wacker-Watch Off-CPU Duration",
+  "uid": "wacker-watch",
+  "version": 1,
+  "description": "Off-CPU intervals greater than 50 us, grouped by thread comm. Includes intentional sleep, I/O blocking and runnable wait; does not identify scheduler contention."
+}

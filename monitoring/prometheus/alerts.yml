@@ -1,0 +1,33 @@
+groups:
+  - name: trading-lab
+    rules:
+      - alert: TradingServiceDown
+        expr: up{job=~"market-data|strategy-engine|api-gateway|kafka"} == 0
+        for: 15s
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Trading service {{ $labels.job }} is unreachable'
+      - alert: StaleStrategyData
+        expr: strategy_last_tick_age_seconds > 10
+        for: 10s
+        labels:
+          severity: warning
+        annotations:
+          summary: Strategy has not processed fresh market data
+      - alert: KafkaConsumerBacklog
+        expr: sum(kafka_consumergroup_lag{consumergroup="strategy-engine-v1"}) > 10
+        for: 15s
+        labels:
+          severity: warning
+        annotations:
+          summary: Strategy consumer is falling behind
+
+      - alert: StrategySequenceBlocked
+        expr: strategy_symbol_sequence_blocked == 1
+        for: 5s
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Sequence recovery is required for {{ $labels.symbol }}'
+          runbook: docs/operations/priority-2.md
