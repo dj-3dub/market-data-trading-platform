@@ -1,5 +1,5 @@
-aws_region        = "us-east-1"
-project_name      = "market-data-trading-platform"
+aws_region   = "us-east-1"
+project_name = "market-data-trading-platform"
 
 vpc_id            = "vpc-xxxxxxxx"
 public_subnet_ids = ["subnet-aaaaaaa", "subnet-bbbbbbb"]

@@ -1,0 +1,93 @@
+name: Deploy AWS test environment
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-aws-test
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment: aws-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      TF_IN_AUTOMATION: 'true'
+      TF_DIR: infra/terraform/envs/aws-managed
+      PROJECT_NAME: ${{ vars.AWS_PROJECT_NAME }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+          terraform_wrapper: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Validate contracts before publishing
+        run: |
+          pip install -r tests/requirements.txt -r services/api-gateway-python/requirements.txt -r services/market-data-python/requirements.txt
+          make reliability-check
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+      - name: Build immutable deployment images
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: python3 scripts/publish-images.py
+      - name: Configure Terraform
+        env:
+          TF_INPUTS: ${{ vars.AWS_TERRAFORM_INPUTS_JSON }}
+          STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          STATE_LOCK_TABLE: ${{ vars.TF_STATE_LOCK_TABLE }}
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib
+          root = pathlib.Path(os.environ['TF_DIR'])
+          config = json.loads(os.environ['TF_INPUTS'])
+          config['images'] = json.loads(pathlib.Path('artifacts/images.json').read_text())
+          (root / 'deployment.auto.tfvars.json').write_text(json.dumps(config))
+          PY
+          terraform -chdir="$TF_DIR" init -backend-config="bucket=$STATE_BUCKET" -backend-config="key=$PROJECT_NAME/terraform.tfstate" -backend-config="region=$AWS_REGION" -backend-config="dynamodb_table=$STATE_LOCK_TABLE" -backend-config=encrypt=true
+          terraform -chdir="$TF_DIR" validate
+          terraform -chdir="$TF_DIR" plan -out=deployment.plan
+      - name: Deploy
+        run: terraform -chdir="$TF_DIR" apply deployment.plan
+      - name: Verify public business path
+        env:
+          API_HOSTNAME: ${{ vars.API_HOSTNAME }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util, os, time
+          spec = importlib.util.spec_from_file_location('probe', 'services/reliability-probe/probe.py')
+          probe = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(probe)
+          deadline = time.monotonic() + 180
+          consecutive = 0
+          while time.monotonic() < deadline:
+              try:
+                  consecutive = consecutive + 1 if probe.check('https://' + os.environ['API_HOSTNAME'] + '/strategy') else 0
+              except Exception:
+                  consecutive = 0
+              if consecutive >= 6:
+                  break
+              time.sleep(5)
+          else:
+              raise SystemExit('Business path did not recover within 180 seconds')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: aws-deployment-images
+          path: artifacts/images.json

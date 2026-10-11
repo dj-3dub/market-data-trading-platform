@@ -1,0 +1,96 @@
+groups:
+  - name: reliability
+    interval: 30s
+    rules:
+      # Missing scrapes are unknown, not successful probes. Alert separately.
+      - record: slo:freshness_good:ratio
+        expr: max(reliability_probe_success)
+        labels:
+          slo: strategy-freshness
+      - record: slo:error_ratio:5m
+        expr: sum by (endpoint) (rate(api_requests_total{status=~"5.."}[5m])) / sum by (endpoint) (rate(api_requests_total{status=~"2..|5.."}[5m]))
+        labels:
+          slo: api-availability
+      - record: slo:error_ratio:1h
+        expr: sum by (endpoint) (rate(api_requests_total{status=~"5.."}[1h])) / sum by (endpoint) (rate(api_requests_total{status=~"2..|5.."}[1h]))
+        labels:
+          slo: api-availability
+      - record: slo:error_ratio:5m
+        expr: 1 - avg_over_time(slo:freshness_good:ratio[5m])
+      - record: slo:error_ratio:1h
+        expr: 1 - avg_over_time(slo:freshness_good:ratio[1h])
+      - record: slo:error_ratio:30m
+        expr: 1 - avg_over_time(slo:freshness_good:ratio[30m])
+      - record: slo:error_ratio:6h
+        expr: 1 - avg_over_time(slo:freshness_good:ratio[6h])
+      - record: slo:error_ratio:30m
+        expr: sum by (endpoint) (rate(api_requests_total{status=~"5.."}[30m])) / sum by (endpoint) (rate(api_requests_total{status=~"2..|5.."}[30m]))
+        labels:
+          slo: api-availability
+      - record: slo:error_ratio:6h
+        expr: sum by (endpoint) (rate(api_requests_total{status=~"5.."}[6h])) / sum by (endpoint) (rate(api_requests_total{status=~"2..|5.."}[6h]))
+        labels:
+          slo: api-availability
+      - record: slo:error_ratio:5m
+        expr: 1 - sum by (endpoint) (rate(api_success_duration_seconds_bucket{le="0.5"}[5m])) / sum by (endpoint) (rate(api_success_duration_seconds_count[5m]))
+        labels:
+          slo: api-latency
+      - record: slo:error_ratio:1h
+        expr: 1 - sum by (endpoint) (rate(api_success_duration_seconds_bucket{le="0.5"}[1h])) / sum by (endpoint) (rate(api_success_duration_seconds_count[1h]))
+        labels:
+          slo: api-latency
+      - record: slo:error_ratio:30m
+        expr: 1 - sum by (endpoint) (rate(api_success_duration_seconds_bucket{le="0.5"}[30m])) / sum by (endpoint) (rate(api_success_duration_seconds_count[30m]))
+        labels:
+          slo: api-latency
+      - record: slo:error_ratio:6h
+        expr: 1 - sum by (endpoint) (rate(api_success_duration_seconds_bucket{le="0.5"}[6h])) / sum by (endpoint) (rate(api_success_duration_seconds_count[6h]))
+        labels:
+          slo: api-latency
+      - record: slo:budget_remaining:ratio30d
+        expr: 1 - (1 - avg_over_time(slo:freshness_good:ratio[30d])) / 0.001
+      - record: slo:budget_remaining:ratio30d
+        expr: 1 - sum by (endpoint) (increase(api_requests_total{status=~"5.."}[30d])) / sum by (endpoint) (increase(api_requests_total{status=~"2..|5.."}[30d])) / 0.001
+        labels:
+          slo: api-availability
+      - record: slo:budget_remaining:ratio30d
+        expr: 1 - (1 - sum by (endpoint) (increase(api_success_duration_seconds_bucket{le="0.5"}[30d])) / sum by (endpoint) (increase(api_success_duration_seconds_count[30d]))) / 0.01
+        labels:
+          slo: api-latency
+      - record: slo:freshness_coverage:ratio30d
+        expr: count_over_time(slo:freshness_good:ratio[30d]) / 86400
+      - alert: ReliabilityFastBurn
+        expr: (slo:error_ratio:1h{slo!="api-latency"} > 0.0144 and slo:error_ratio:5m > 0.0144) or (slo:error_ratio:1h{slo="api-latency"} > 0.144 and slo:error_ratio:5m > 0.144)
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Availability or freshness is consuming its budget rapidly
+          runbook: docs/reliability/README.md
+      - alert: ReliabilitySlowBurn
+        expr: (slo:error_ratio:6h{slo!="api-latency"} > 0.006 and slo:error_ratio:30m > 0.006) or (slo:error_ratio:6h{slo="api-latency"} > 0.06 and slo:error_ratio:30m > 0.06)
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Sustained error budget consumption requires reliability work
+          runbook: docs/reliability/README.md
+      - alert: ReliabilityProbeMissing
+        expr: absent_over_time(reliability_probe_success[2m])
+        labels:
+          severity: critical
+        annotations:
+          summary: Freshness measurement is missing; budget is unknown
+      - alert: ReliabilityProbeStalled
+        expr: time() - reliability_probe_timestamp_seconds > 30
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Probe is scraped but has stopped completing checks
+      - alert: ReliabilityAPITelemetryMissing
+        expr: absent_over_time(api_requests_total[2m])
+        labels:
+          severity: critical
+        annotations:
+          summary: API request accounting is missing; budget is unknown

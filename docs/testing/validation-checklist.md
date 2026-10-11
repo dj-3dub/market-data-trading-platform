@@ -1,5 +1,9 @@
 # Validation Checklist
 
+Run `make up`, `python3 scripts/verify-pipeline.py`, then `make doctor test`.
+Run `make incident` for automated consumer-outage and recovery validation.
+See [the local demo guide](../operations/demo.md) for expected results.
+
 ## Platform Baseline
 - [ ] All required containers running
 - [ ] Health endpoints responding
