@@ -5,14 +5,25 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+  workflow_dispatch:
+  schedule:
+    - cron: '23 4 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # -----------------------------
-  # 1) Build Docker images (Python + Web)
+  # 1) Validate compose + static checks
   # -----------------------------
-  build-docker:
-    name: Build Docker images
+  validate:
+    name: Validate compose and static checks
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repo
@@ -21,33 +32,137 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Market Data (Python)
-      - name: Build market-data-python image
+      - name: Validate docker compose file
         run: |
-          docker build \
-            -t mdp-market-data:ci \
-            services/market-data-python
+          make setup
+          docker compose config --quiet
 
-      # API Gateway (Python)
-      - name: Build api-gateway-python image
+      - name: Check shell scripts with shellcheck
         run: |
-          docker build \
-            -t mdp-api-gateway:ci \
-            services/api-gateway-python
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          shellcheck -S warning scripts/*.sh
 
-      # Web Frontend
-      - name: Build web-frontend image
+      - name: Compile Python sources
+        run: python3 -m compileall -q services scripts tools agents/wacker-watch/cmd
+
+      - name: Test Prometheus rules
+        run: make test-rules
+
+      - name: Lint workflows
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color
+
+      - name: Validate JSON dashboards and provisioning
         run: |
-          docker build \
-            -t mdp-web-frontend:ci \
-            services/web-frontend
+          python3 - <<'PY'
+          import glob, json, sys
+          ok = True
+          for f in sorted(glob.glob('monitoring/grafana/dashboards/*.json')):
+              try:
+                  d = json.load(open(f))
+              except Exception as e:
+                  print(f'FAIL: {f}: {e}'); ok = False; continue
+              # Grafana's file provisioner expects the raw dashboard model.
+              # An API-style {"dashboard": {...}} export fails to load with
+              # "Dashboard title cannot be empty".
+              if 'dashboard' in d and 'title' not in d:
+                  print(f'FAIL: {f}: wrapped API export format; '
+                        'Grafana file provisioning needs the raw dashboard JSON')
+                  ok = False
+              elif not d.get('title'):
+                  print(f'FAIL: {f}: missing "title"'); ok = False
+              elif not d.get('panels'):
+                  print(f'FAIL: {f}: missing "panels"'); ok = False
+              else:
+                  print(f'OK:   {f} (uid={d.get("uid")}, '
+                        f'{len(d["panels"])} panels)')
+          sys.exit(0 if ok else 1)
+          PY
+
+      - name: Structural check on eBPF source
+        # Full compilation of the probe needs BCC's injected headers plus
+        # matching kernel headers for the runner, which GitHub-hosted runners do
+        # not provide. The build-docker job compiles the image, and a real
+        # compile happens in the container at runtime. This step catches the
+        # cheap regressions: syntax balance and the structures the userland
+        # decoder depends on.
+        run: |
+          python3 - <<'PY'
+          import re, sys
+          src = open('agents/wacker-watch/bpf/wacker_watch.bpf.c').read()
+          ok = True
+
+          if src.count('{') != src.count('}'):
+              print('FAIL: unbalanced braces in wacker_watch.bpf.c'); ok = False
+          if src.count('(') != src.count(')'):
+              print('FAIL: unbalanced parens in wacker_watch.bpf.c'); ok = False
+
+          for required in ('TRACEPOINT_PROBE(sched, sched_switch)',
+                           'BPF_PERF_OUTPUT(latency_events)',
+                           'struct event_t'):
+              if required not in src:
+                  print(f'FAIL: missing {required!r}'); ok = False
+
+          m = re.search(r'struct\s+event_t\s*\{(.*?)\}', src, re.S)
+          if m:
+              body = re.sub(r'/\*.*?\*/', '', m.group(1), flags=re.S)
+              decl_re = re.compile(
+                  r'^\s*(?:const\s+|unsigned\s+|signed\s+)*'
+                  r'[A-Za-z_]\w*\s+([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*$')
+              names = []
+              for decl in body.split(';'):
+                  if not decl.strip():
+                      continue
+                  dm = decl_re.match(decl)
+                  if dm:
+                      names.append(dm.group(1))
+              if names != ['pid', 'off_cpu_ns', 'comm']:
+                  print(f'FAIL: struct event_t fields changed to {names}; '
+                        'update EventT in agents/wacker-watch/cmd/wacker_watch.py')
+                  ok = False
+              else:
+                  print(f'OK:   struct event_t fields {names}')
+          else:
+              print('FAIL: could not parse struct event_t'); ok = False
+
+          sys.exit(0 if ok else 1)
+          PY
 
   # -----------------------------
-  # 2) Build C# Strategy Engine
+  # 2) Build Docker images (Python + Web)
+  # -----------------------------
+  build-docker:
+    name: Build agent and AWS collector images
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Application images are built and exercised in the integration job.
+      - name: Build managed Prometheus collector
+        run: docker build -t mdp-collector:ci services/prometheus-collector
+      - name: Validate generated AWS scrape and remote-write config
+        run: docker run --rm -e DISCOVERY_NAMESPACE=test.internal -e AMP_REMOTE_WRITE_URL=https://example.com/api/v1/remote_write -e AWS_REGION=us-east-1 mdp-collector:ci --check
+
+      # Wacker-Watch eBPF agent (build only; eBPF load needs a native kernel)
+      - name: Build wacker-watch image
+        run: |
+          docker build \
+            -t mdp-wacker-watch:ci \
+            agents/wacker-watch
+
+  # -----------------------------
+  # 3) Build C# Strategy Engine
   # -----------------------------
   build-dotnet:
     name: Build C# strategy engine
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repo
@@ -56,7 +171,7 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Restore and build StrategyEngine
         working-directory: services/strategy-csharp/src
@@ -64,16 +179,43 @@ jobs:
           dotnet restore
           dotnet build --configuration Release --no-restore
 
+      - name: Test strategy contracts
+        run: dotnet test services/strategy-csharp/tests --configuration Release --logger trx --results-directory artifacts/dotnet
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dotnet-test-results
+          path: artifacts/
+
+  test-python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: '**/requirements.txt'
+      - run: pip install -r tests/requirements.txt -r services/api-gateway-python/requirements.txt -r services/market-data-python/requirements.txt
+      - run: python -m pytest tests --junitxml=artifacts/python.xml --cov=services --cov-report=xml:artifacts/coverage.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: python-test-results
+          path: artifacts/
+
   # -----------------------------
-  # 3) Terraform fmt + validate (aws-fargate env)
+  # 4) Terraform fmt + validate (active managed AWS environment)
   # -----------------------------
   terraform-validate:
-    name: Terraform validate (aws-fargate)
+    name: Terraform validate (aws-managed)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     defaults:
       run:
-        working-directory: infra/terraform/envs/aws-fargate
+        working-directory: infra/terraform/envs/aws-managed
 
     steps:
       - name: Checkout repo
@@ -88,4 +230,56 @@ jobs:
         run: terraform fmt -check
 
       - name: Terraform validate
-        run: terraform validate
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: Test managed AWS foundation
+        run: terraform test
+
+  integration:
+    name: Local lab acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [validate, test-python, build-dotnet]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start local platform
+        run: make up
+      - name: Wait for live pipeline and dashboards
+        run: python3 scripts/verify-pipeline.py
+      - name: Validate Prometheus rules
+        run: docker compose exec -T prometheus promtool check config /etc/prometheus/prometheus.yml
+      - name: Check health and smoke tests
+        run: make doctor test
+      - name: Verify consumer outage and recovery
+        run: python3 scripts/failure-suite.py consumer
+      - name: Verify state survives container recreation
+        run: |
+          make test-persistence
+          python3 scripts/verify-pipeline.py
+          make doctor
+      - name: Verify deterministic replay and checkpoint crash boundaries
+        run: |
+          make test-replay test-correctness
+          python3 scripts/verify-pipeline.py
+      - name: Extended failure scenarios
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: |
+          python3 scripts/failure-suite.py producer
+          python3 scripts/failure-suite.py broker
+          python3 scripts/failure-suite.py strategy-restart
+          python3 scripts/failure-suite.py malformed-tick
+          python3 scripts/failure-suite.py scrape-loss
+      - name: Collect evidence
+        if: always()
+        run: python3 scripts/collect-debug-data.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-evidence
+          path: artifacts/
+          retention-days: 14
+      - name: Stop local platform
+        if: always()
+        run: docker compose down -v

@@ -10,13 +10,27 @@ obj/
 # Terraform
 .terraform/
 .terraform.lock.hcl
+!infra/terraform/envs/aws-managed/.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 
 # Docker
 *.log
 
+# eBPF / BCC build artifacts
+*.o
+*.llc
+
 # Misc
 .env
 .vscode/
 .idea/
+artifacts/
+*.auto.tfvars.json
+*.plan
+.coverage
+
+.env.*
+!.env.example
+.pytest_cache/
+state-backup/

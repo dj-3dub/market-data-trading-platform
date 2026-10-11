@@ -1,0 +1,21 @@
+{
+  "uid": "reliability", "title": "Reliability — SLOs and error budgets",
+  "schemaVersion": 39, "version": 1, "refresh": "30s",
+  "time": {"from": "now-6h", "to": "now"},
+  "panels": [
+    {"id": 1, "title": "Remaining 30-day budget (negative = exhausted)", "type": "timeseries",
+     "gridPos": {"x": 0, "y": 0, "w": 24, "h": 8},
+     "targets": [{"expr": "slo:budget_remaining:ratio30d", "legendFormat": "{{slo}} {{endpoint}}"}],
+     "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []}},
+    {"id": 2, "title": "Availability / freshness burn rate (1 = sustainable)", "type": "timeseries",
+     "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+     "targets": [{"expr": "slo:error_ratio:1h / 0.001", "legendFormat": "{{slo}} {{endpoint}}"}]},
+    {"id": 3, "title": "30-day freshness measurement coverage", "type": "stat",
+     "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+     "targets": [{"expr": "slo:freshness_coverage:ratio30d"}],
+     "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []}},
+    {"id": 4, "title": "Firing reliability alerts", "type": "table",
+     "gridPos": {"x": 0, "y": 16, "w": 24, "h": 8},
+     "targets": [{"expr": "ALERTS{alertname=~\"Reliability.*\",alertstate=\"firing\"}", "instant": true, "format": "table"}]}
+  ]
+}

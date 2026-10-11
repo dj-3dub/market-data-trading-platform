@@ -1,0 +1,97 @@
+rule_files:
+  - slo.yml
+evaluation_interval: 30s
+tests:
+  - name: idle endpoints cannot claim a successful budget
+    interval: 30s
+    input_series:
+      - series: 'api_requests_total{endpoint="/price",status="200"}'
+        values: '0+0x20'
+      - series: 'api_requests_total{endpoint="/price",status="503"}'
+        values: '0+0x20'
+    promql_expr_test:
+      - expr: 'slo:budget_remaining:ratio30d{slo="api-availability"} >= 0'
+        eval_time: 10m
+        exp_samples: []
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ReliabilityFastBurn
+        exp_alerts: []
+  - name: successful traffic including counter reset preserves the budget
+    interval: 30s
+    input_series:
+      - series: 'api_requests_total{endpoint="/price",status="200"}'
+        values: '0+10x10 0+10x10'
+      - series: 'api_requests_total{endpoint="/price",status="503"}'
+        values: '0+0x21'
+    promql_expr_test:
+      - expr: 'slo:budget_remaining:ratio30d{slo="api-availability"}'
+        eval_time: 10m
+        exp_samples:
+          - labels: '{__name__="slo:budget_remaining:ratio30d",slo="api-availability",endpoint="/price"}'
+            value: 1
+  - name: latency burn uses the one percent allowance
+    interval: 30s
+    input_series:
+      - series: 'api_success_duration_seconds_count{endpoint="/strategy"}'
+        values: '0+100x130'
+      - series: 'api_success_duration_seconds_bucket{endpoint="/strategy",le="0.5"}'
+        values: '0+90x130'
+    alert_rule_test:
+      - eval_time: 65m
+        alertname: ReliabilityFastBurn
+        exp_alerts: []
+      - eval_time: 65m
+        alertname: ReliabilitySlowBurn
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              slo: api-latency
+              endpoint: /strategy
+            exp_annotations:
+              summary: Sustained error budget consumption requires reliability work
+              runbook: docs/reliability/README.md
+  - name: short freshness fault clears without fast burn
+    interval: 30s
+    input_series:
+      - series: reliability_probe_success
+        values: '1+0x10 0 1+0x130'
+    alert_rule_test:
+      - eval_time: 65m
+        alertname: ReliabilityFastBurn
+        exp_alerts: []
+  - name: healthy probes consume no budget
+    interval: 30s
+    input_series:
+      - series: reliability_probe_success
+        values: '1+0x20'
+    promql_expr_test:
+      - expr: slo:budget_remaining:ratio30d{slo="strategy-freshness"}
+        eval_time: 10m
+        exp_samples:
+          - labels: '{__name__="slo:budget_remaining:ratio30d",slo="strategy-freshness"}'
+            value: 1
+  - name: missing probe is observable
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ReliabilityProbeMissing
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: Freshness measurement is missing; budget is unknown
+  - name: sustained failure burns budget
+    interval: 30s
+    input_series:
+      - series: reliability_probe_success
+        values: '0+0x130'
+    alert_rule_test:
+      - eval_time: 65m
+        alertname: ReliabilityFastBurn
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              slo: strategy-freshness
+            exp_annotations:
+              summary: Availability or freshness is consuming its budget rapidly
+              runbook: docs/reliability/README.md

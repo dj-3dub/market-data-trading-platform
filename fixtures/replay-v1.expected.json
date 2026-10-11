@@ -1,0 +1,9 @@
+{
+  "Accepted": 7,
+  "Trades": 3,
+  "Duplicates": 2,
+  "OutOfOrder": 2,
+  "Gaps": 1,
+  "Quarantined": 4,
+  "Stale": 1
+}

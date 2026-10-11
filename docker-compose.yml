@@ -1,16 +1,42 @@
+# ==========================================================
+# Trading Observability Platform - unified compose stack
+# ==========================================================
+# Application workload (market data -> Kafka -> strategy -> API -> frontend)
+# plus the Wacker-Watch eBPF kernel-signal agent, sharing one Prometheus and
+# one Grafana instance.
+#
+# The eBPF agent lives behind the "ebpf" compose profile so a default
+# `make up` still works on hosts that cannot load eBPF (WSL2, unprivileged
+# Docker Desktop, non-Linux). Use `make agent-up` to start it.
+
 services:
+  reliability-probe:
+    build: ./services/reliability-probe
+    restart: unless-stopped
+    networks:
+      - trading-net
+
   market-data:
+    restart: unless-stopped
     build:
       context: ./services/market-data-python
     container_name: mdp-market-data
     ports:
-      - "7001:7001"
+      - "127.0.0.1:${MARKET_DATA_PORT:-7001}:7001"
     environment:
       - SERVICE_NAME=market-data
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TICKS_TOPIC=ticks-v1
+      - TICK_INTERVAL_SECONDS=${TICK_INTERVAL_SECONDS:-1}
+      - MARKET_SYMBOLS=FAKE,FAKE2,FAKE3
+      - PRODUCER_STATE_DIR=/data
+    volumes:
+      - producer-state:/data
     networks:
       - trading-net
 
   strategy-engine:
+    restart: unless-stopped
     build:
       context: ./services/strategy-csharp
     container_name: mdp-strategy-engine
@@ -20,12 +46,18 @@ services:
     environment:
       - SERVICE_NAME=strategy-engine
       - MARKET_DATA_URL=http://market-data:7001
+      - MARKET_SYMBOLS=FAKE,FAKE2,FAKE3
+      - STRATEGY_STATE_DIR=/data
+      - KAFKA_CONSUMER_GROUP=strategy-engine-v1
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - KAFKA_TICKS_TOPIC=ticks
+      - KAFKA_TICKS_TOPIC=ticks-v1
+    volumes:
+      - strategy-state:/data
     networks:
       - trading-net
 
   api-gateway:
+    restart: unless-stopped
     build:
       context: ./services/api-gateway-python
     container_name: mdp-api-gateway
@@ -33,7 +65,7 @@ services:
       - market-data
       - strategy-engine
     ports:
-      - "8000:8000"
+      - "127.0.0.1:${API_PORT:-8000}:8000"
     environment:
       - MARKET_DATA_URL=http://market-data:7001
       - STRATEGY_URL=http://strategy-engine:7002
@@ -41,63 +73,137 @@ services:
       - trading-net
 
   web-frontend:
+    restart: unless-stopped
     build:
       context: ./services/web-frontend
     container_name: mdp-web-frontend
     depends_on:
       - api-gateway
     ports:
-      - "8080:80"
+      - "127.0.0.1:${WEB_PORT:-8082}:80"
     networks:
       - trading-net
 
+  # ---------------------------------------------------------
+  # Wacker-Watch: eBPF off-CPU duration agent
+  # ---------------------------------------------------------
+  # Requires a native Linux kernel and elevated capabilities. Gated behind the
+  # "ebpf" profile so the default stack stays portable.
+  #
+  # user: "0:0" is required, not incidental. BCC's TRACEPOINT_PROBE reads the
+  # sched_switch field layout from
+  # /sys/kernel/debug/tracing/events/sched/sched_switch/format, which is
+  # mode 0640 root:root. The non-root `wacker` user (the image default, used for
+  # host runs) cannot read it, so the probe fails to compile. Since this
+  # container already requires SYS_ADMIN/SYS_PTRACE/BPF, the real security
+  # boundary is the capability set, not the UID.
+  wacker-watch:
+    restart: unless-stopped
+    build:
+      context: ./agents/wacker-watch
+    container_name: mdp-wacker-watch
+    profiles:
+      - ebpf
+    user: "0:0"
+    cap_add:
+      - SYS_ADMIN
+      - SYS_PTRACE
+      - BPF
+    security_opt:
+      - seccomp=unconfined
+    volumes:
+      - /sys/fs/bpf:/sys/fs/bpf:rw
+      # BCC's TRACEPOINT_PROBE reads the sched_switch field layout from
+      # debugfs, and /lib/modules/$(uname -r)/build is normally a symlink into
+      # /usr/src, so all three trees are required to compile and load the probe.
+      - /sys/kernel/debug:/sys/kernel/debug:ro
+      - /lib/modules:/lib/modules:ro
+      - /usr/src:/usr/src:ro
+    ports:
+      - "127.0.0.1:${AGENT_PORT:-8001}:8001"
+    environment:
+      - WACKER_METRICS_PORT=8001
+    networks:
+      - trading-net
+
+  # ---------------------------------------------------------
+  # Shared observability stack
+  # ---------------------------------------------------------
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.1.0
     container_name: mdp-prometheus
+    user: "nobody"
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./monitoring/prometheus/slo.yml:/etc/prometheus/slo.yml:ro
+      - prometheus-data:/prometheus
     ports:
-      - "9091:9090"
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=35d'
+    # Lets Prometheus scrape the eBPF agent when it runs natively on the host
+    # (make agent-run) rather than as a container.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
     networks:
       - trading-net
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:12.1.1
     container_name: mdp-grafana
+    user: "472"
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?Run make setup before starting Compose}
+      - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
-      - "3000:3000"
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
     depends_on:
       - prometheus
+    restart: unless-stopped
     networks:
       - trading-net
+
   zookeeper:
+    restart: unless-stopped
     image: confluentinc/cp-zookeeper:7.6.0
     container_name: mdp-zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-log:/var/lib/zookeeper/log
     networks:
       - trading-net
 
   kafka:
+    restart: unless-stopped
     image: confluentinc/cp-kafka:7.6.0
     container_name: mdp-kafka
     depends_on:
       - zookeeper
     ports:
-      - "9092:9092"
+      - "127.0.0.1:${KAFKA_PORT:-9092}:29092"
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,HOST:PLAINTEXT
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092,HOST://0.0.0.0:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,HOST://localhost:${KAFKA_PORT:-9092}
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_NUM_PARTITIONS: 1
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafka-data:/var/lib/kafka/data
     networks:
       - trading-net
 
@@ -107,25 +213,40 @@ services:
     depends_on:
       - kafka
     ports:
-      - "8081:8080"
+      - "127.0.0.1:${KAFKA_UI_PORT:-8081}:8080"
     environment:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    # kafka-ui and kafka-exporter both exit fatally if the broker is not yet
+    # accepting connections. depends_on only waits for the container to start,
+    # not for the broker to be ready, so a restart policy is what actually
+    # recovers from that race on a cold `make up`.
+    restart: unless-stopped
     networks:
       - trading-net
 
   kafka-exporter:
-    image: danielqsj/kafka-exporter
+    image: danielqsj/kafka-exporter:v1.9.0
     container_name: mdp-kafka-exporter
     depends_on:
       - kafka
     command:
       - "--kafka.server=kafka:9092"
     ports:
-      - "9308:9308"
+      - "127.0.0.1:${KAFKA_EXPORTER_PORT:-9308}:9308"
+    restart: unless-stopped
     networks:
       - trading-net
 
 networks:
   trading-net:
     driver: bridge
+
+volumes:
+  producer-state:
+  strategy-state:
+  kafka-data:
+  zookeeper-data:
+  zookeeper-log:
+  grafana-data:
+  prometheus-data:
