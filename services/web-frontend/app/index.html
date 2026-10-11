@@ -1,20 +1,54 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Trading Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trading Observability Lab</title>
+  <style>
+    body { font: 16px system-ui; background: #101827; color: #e5edf9; max-width: 1000px; margin: 3rem auto; padding: 1rem; }
+    main { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+    article { background: #1d2b40; padding: 1.5rem; border-radius: 12px; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+    #status { padding: 1rem 0; } button { padding: .6rem 1rem; cursor: pointer; }
+    .ok { color: #71e3b2; } .bad { color: #ffadad; }
+  </style>
 </head>
 <body>
-  <h1>Trading Dashboard (v1)</h1>
-  <button id="refresh">Get Latest Price</button>
-  <pre id="output">Click refresh to fetch price...</pre>
-
+  <h1>Trading Observability Lab</h1>
+  <p>Simulated FAKE ticks → Kafka → strategy engine. Prices and signals refresh every two seconds.</p>
+  <button id="refresh">Refresh now</button>
+  <div id="status" role="status" aria-live="polite">Connecting…</div>
+  <main>
+    <article><h2>Published market data</h2><pre id="price">Waiting…</pre></article>
+    <article><h2>Processed strategy state</h2><pre id="strategy">Waiting…</pre></article>
+  </main>
+  <p>BUY signals are simulated decisions; no orders are placed.</p>
   <script>
-    document.getElementById('refresh').onclick = async () => {
-      const res = await fetch('http://localhost:8000/price');
-      const data = await res.json();
-      document.getElementById('output').textContent = JSON.stringify(data, null, 2);
-    };
+    let updating = false;
+    async function refresh() {
+      if (updating) return;
+      updating = true;
+      const status = document.getElementById('status');
+      const results = await Promise.all(['price', 'strategy'].map(async endpoint => {
+        const output = document.getElementById(endpoint);
+        try {
+          const response = await fetch(`/api/${endpoint}`, {signal: AbortSignal.timeout(8000)});
+          const data = await response.json();
+          output.textContent = JSON.stringify(data, null, 2);
+          return response.ok && data.status !== 'stale';
+        } catch (error) {
+          output.textContent = `Unavailable: ${error.message}`;
+          return false;
+        }
+      }));
+      const healthy = results.every(Boolean);
+      status.className = healthy ? 'ok' : 'bad';
+      status.textContent = `${healthy ? 'Live pipeline' : 'Degraded pipeline'} · checked ${new Date().toLocaleTimeString()}`;
+      updating = false;
+    }
+    document.getElementById('refresh').onclick = refresh;
+    refresh();
+    setInterval(refresh, 2000);
   </script>
 </body>
 </html>
