@@ -205,3 +205,9 @@ priority2-acceptance: acceptance
 	python3 scripts/correctness-suite.py --boundary before
 	python3 scripts/correctness-suite.py --boundary after
 	python3 scripts/verify-pipeline.py
+
+# SRE portfolio drill: broker outage + post-recovery data integrity.
+# The fault suite restores Kafka even on failure. Do not run on production.
+.PHONY: sre-kafka-drill
+sre-kafka-drill:
+	python3 scripts/sre-kafka-drill.py
