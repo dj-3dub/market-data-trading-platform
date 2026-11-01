@@ -37,7 +37,7 @@ scrape_configs:
     metrics_path: /metrics
     scrape_interval: 5s
     static_configs:
-      - targets: ["172.18.0.1:9108"]
+      - targets: ["172.30.50.1:9108"]
         labels:
           component: multicast-feed
           environment: homelab
