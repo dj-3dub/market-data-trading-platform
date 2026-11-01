@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Validate market-data incidents and write timestamped JSON evidence."""
 
 import argparse
 import datetime as dt
@@ -23,6 +22,9 @@ METRICS = (
     "feed_sequence_gaps_total",
     "feed_gap_recoveries_total",
     "feed_unresolved_gaps",
+    "feed_packets_received_total",
+    "feed_sessions_total",
+    "feed_stale",
 )
 
 
@@ -86,19 +88,46 @@ def wait_until(predicate, timeout):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+
     parser.add_argument(
-        "--mode", choices=("health", "gap-replay"), default="health"
+        "--mode",
+        choices=("health", "gap-replay", "stale-recovery"),
+        default="health",
     )
+
     parser.add_argument(
-        "--prometheus", default="http://127.0.0.1:9090"
+        "--prometheus",
+        default="http://127.0.0.1:9090",
     )
+
     parser.add_argument(
-        "--sender", default="labs/market-data-network/feed_sender.py"
+        "--sender",
+        default="labs/market-data-network/feed_sender.py",
     )
+
     parser.add_argument(
-        "--output-dir", default="artifacts/incidents"
+        "--output-dir",
+        default="artifacts/incidents",
     )
-    parser.add_argument("--timeout", type=int, default=90)
+
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=90,
+    )
+
+    parser.add_argument(
+        "--pause-seconds",
+        type=int,
+        default=20,
+    )
+
+    parser.add_argument(
+        "--rate",
+        type=int,
+        default=10,
+    )
+
     args = parser.parse_args()
 
     report = {
@@ -259,6 +288,237 @@ def main():
                 "gap_recovered_and_alert_resolved",
                 recovered,
                 report["recovered"],
+            )
+
+        if args.mode == "stale-recovery":
+            sender = pathlib.Path(args.sender)
+            record("sender_exists", sender.is_file(), str(sender))
+
+            record(
+                "valid_sender_parameters",
+                args.rate > 0 and args.pause_seconds >= 20,
+                {
+                    "rate": args.rate,
+                    "pause_seconds": args.pause_seconds,
+                },
+            )
+
+            # Allow enough time for Prometheus to observe
+            # the healthy baseline, interruption, and recovery.
+            duration = args.pause_seconds + 60
+            pause_after = args.rate * 15
+
+            cmd = [
+                sys.executable, "-u", str(sender),
+                "--continuous",
+                "--rate", str(args.rate),
+                "--duration", str(duration),
+                "--pause-after", str(pause_after),
+                "--pause-seconds", str(args.pause_seconds),
+            ]
+
+            report["sender_command"] = cmd
+
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+
+            try:
+                baseline = initial["metrics"]["feed_packets_received_total"]
+
+                healthy = wait_until(
+                    lambda: (
+                        prom_query(
+                            args.prometheus,
+                            'feed_packets_received_total{job="market-data-network"}',
+                        ) > baseline
+                        and prom_query(
+                            args.prometheus,
+                            'feed_stale{job="market-data-network"}',
+                        ) == 0
+                        and alert_states(args.prometheus)
+                        .get("MarketDataFeedStale", {})
+                        .get("state") == "inactive"
+                    ),
+                    args.timeout,
+                )
+
+                report["healthy"] = snapshot(args.prometheus)
+                record(
+                    "healthy_feed_established",
+                    healthy,
+                    report["healthy"],
+                )
+
+                stale_detected = wait_until(
+                    lambda: (
+                        prom_query(
+                            args.prometheus,
+                            'feed_stale{job="market-data-network"}',
+                        ) == 1
+                        and alert_states(args.prometheus)
+                        .get("MarketDataFeedStale", {})
+                        .get("state") == "firing"
+                    ),
+                    args.timeout,
+                )
+
+                report["stale_detected"] = snapshot(args.prometheus)
+                record(
+                    "stale_feed_alert_firing",
+                    stale_detected,
+                    report["stale_detected"],
+                )
+
+                recovery_baseline = report["stale_detected"][
+                    "metrics"
+                ]["feed_packets_received_total"]
+
+                recovered = wait_until(
+                    lambda: (
+                        prom_query(
+                            args.prometheus,
+                            'feed_packets_received_total{job="market-data-network"}',
+                        ) > recovery_baseline
+                        and prom_query(
+                            args.prometheus,
+                            'feed_stale{job="market-data-network"}',
+                        ) == 0
+                        and alert_states(args.prometheus)
+                        .get("MarketDataFeedStale", {})
+                        .get("state") == "inactive"
+                    ),
+                    args.timeout,
+                )
+
+                report["recovered"] = snapshot(args.prometheus)
+                record(
+                    "stale_feed_recovered_and_alert_resolved",
+                    recovered,
+                    report["recovered"],
+                )
+
+            finally:
+                if proc.poll() is None:
+                    proc.terminate()
+
+                try:
+                    stdout, stderr = proc.communicate(timeout=10)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    stdout, stderr = proc.communicate()
+
+                report["sender"] = {
+                    "returncode": proc.returncode,
+                    "stdout": stdout[-12000:],
+                    "stderr": stderr[-4000:],
+                }
+
+                # Extract timestamped sender events.
+                from datetime import datetime
+
+                events = {}
+
+                for line in stdout.splitlines():
+                    if line.startswith(("INJECTED_PAUSE", "INJECTED_RESUME")):
+                        match = re.search(
+                            r"timestamp=([0-9.]+).*session_id=([^\s]+)",
+                            line,
+                        )
+
+                        if match:
+                            name = (
+                                "pause"
+                                if line.startswith("INJECTED_PAUSE")
+                                else "resume"
+                            )
+                            events[name] = {
+                                "timestamp": float(match.group(1)),
+                                "session_id": match.group(2),
+                            }
+
+                report["injection_events"] = events
+
+                if "pause" in events and "resume" in events:
+                    report["session_correlated"] = (
+                        events["pause"]["session_id"]
+                        == events["resume"]["session_id"]
+                    )
+
+                    firing = next(
+                        (
+                            s for s in report["steps"]
+                            if s["name"] == "stale_feed_alert_firing"
+                        ),
+                        None,
+                    )
+
+                    recovered = next(
+                        (
+                            s for s in report["steps"]
+                            if s["name"]
+                            == "stale_feed_recovered_and_alert_resolved"
+                        ),
+                        None,
+                    )
+
+                    if firing and recovered:
+                        firing_ts = datetime.fromisoformat(
+                            firing["at_utc"]
+                        ).timestamp()
+
+                        recovered_ts = datetime.fromisoformat(
+                            recovered["at_utc"]
+                        ).timestamp()
+
+                        report["incident_timing"] = {
+                            "observed_detection_latency_seconds": round(
+                                firing_ts - events["pause"]["timestamp"], 3
+                            ),
+                            "observed_recovery_latency_seconds": round(
+                                recovered_ts - events["resume"]["timestamp"], 3
+                            ),
+                            "injected_pause_duration_seconds": round(
+                                events["resume"]["timestamp"]
+                                - events["pause"]["timestamp"], 3
+                            ),
+                        }
+
+        if args.mode == "stale-recovery":
+            events = report.get("injection_events", {})
+            timing = report.get("incident_timing", {})
+
+            record(
+                "injection_events_captured",
+                "pause" in events and "resume" in events,
+                events,
+            )
+
+            record(
+                "sender_session_correlated",
+                report.get("session_correlated") is True,
+                events,
+            )
+
+            detection = timing.get("observed_detection_latency_seconds")
+            recovery = timing.get("observed_recovery_latency_seconds")
+            duration = timing.get("injected_pause_duration_seconds")
+
+            record(
+                "incident_timing_valid",
+                all(
+                    isinstance(value, (int, float))
+                    and not isinstance(value, bool)
+                    and 0 <= value <= args.timeout
+                    for value in (detection, recovery)
+                )
+                and isinstance(duration, (int, float))
+                and not isinstance(duration, bool)
+                and abs(duration - args.pause_seconds) <= 1.0,
+                timing,
             )
 
         report["passed"] = True

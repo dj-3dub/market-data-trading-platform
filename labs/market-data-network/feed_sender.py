@@ -180,11 +180,17 @@ def run_continuous(sock, session_id, args):
                 paused = True
                 print(
                     f"INJECTED_PAUSE after={attempted} "
-                    f"seconds={args.pause_seconds}",
+                    f"seconds={args.pause_seconds} "
+                    f"timestamp={time.time():.6f} "
+                    f"session_id={session_id}",
                     flush=True,
                 )
                 time.sleep(args.pause_seconds)
-                print("INJECTED_RESUME", flush=True)
+                print(
+                    f"INJECTED_RESUME timestamp={time.time():.6f} "
+                    f"session_id={session_id}",
+                    flush=True,
+                )
                 next_send = time.monotonic()
                 continue
 
