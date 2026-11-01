@@ -130,7 +130,7 @@ services:
   # Shared observability stack
   # ---------------------------------------------------------
   prometheus:
-    image: prom/prometheus:v3.1.0
+    image: prom/prometheus:v3.15.1
     container_name: mdp-prometheus
     user: "nobody"
     volumes:
@@ -152,7 +152,7 @@ services:
       - trading-net
 
   grafana:
-    image: grafana/grafana:12.1.1
+    image: grafana/grafana:13.3.0
     container_name: mdp-grafana
     user: "472"
     environment:
@@ -226,7 +226,7 @@ services:
       - trading-net
 
   kafka-exporter:
-    image: danielqsj/kafka-exporter:v1.9.0
+    image: danielqsj/kafka-exporter:v1.10.0
     container_name: mdp-kafka-exporter
     depends_on:
       - kafka
