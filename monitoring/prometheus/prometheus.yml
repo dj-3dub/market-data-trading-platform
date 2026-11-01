@@ -32,6 +32,16 @@ scrape_configs:
     static_configs:
       - targets: ["kafka-exporter:9308"]
 
+  # UDP multicast market-data feed integrity lab.
+  - job_name: "market-data-network"
+    metrics_path: /metrics
+    scrape_interval: 5s
+    static_configs:
+      - targets: ["172.18.0.1:9108"]
+        labels:
+          component: multicast-feed
+          environment: homelab
+
   # Wacker-Watch eBPF off-CPU duration agent.
   # The agent can run two ways, so both are scraped:
   #   wacker-watch:8001          -> agent running as a container on trading-net
