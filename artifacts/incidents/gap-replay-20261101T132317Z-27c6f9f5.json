@@ -1,0 +1,235 @@
+{
+  "schema_version": 1,
+  "run_id": "27c6f9f5-804e-42a7-9238-70fcaa5eb057",
+  "mode": "gap-replay",
+  "started_at_utc": "2026-11-01T13:22:41.066520+00:00",
+  "passed": true,
+  "steps": [
+    {
+      "name": "prometheus_target_up",
+      "passed": true,
+      "at_utc": "2026-11-01T13:22:41.124820+00:00",
+      "details": 1.0
+    },
+    {
+      "name": "alert_rules_present_and_healthy",
+      "passed": true,
+      "at_utc": "2026-11-01T13:22:41.125020+00:00",
+      "details": {
+        "MarketDataFeedStale": {
+          "state": "inactive",
+          "health": "ok"
+        },
+        "MarketDataUnresolvedGap": {
+          "state": "inactive",
+          "health": "ok"
+        },
+        "MarketDataExporterDown": {
+          "state": "inactive",
+          "health": "ok"
+        }
+      }
+    },
+    {
+      "name": "no_existing_unresolved_gaps",
+      "passed": true,
+      "at_utc": "2026-11-01T13:22:41.125071+00:00",
+      "details": 0.0
+    },
+    {
+      "name": "gap_alert_initially_inactive",
+      "passed": true,
+      "at_utc": "2026-11-01T13:22:41.125095+00:00",
+      "details": null
+    },
+    {
+      "name": "sender_exists",
+      "passed": true,
+      "at_utc": "2026-11-01T13:22:41.125281+00:00",
+      "details": "labs/market-data-network/feed_sender.py"
+    },
+    {
+      "name": "sender_completed",
+      "passed": true,
+      "at_utc": "2026-11-01T13:23:11.244289+00:00",
+      "details": null
+    },
+    {
+      "name": "sender_session_captured",
+      "passed": true,
+      "at_utc": "2026-11-01T13:23:11.244700+00:00",
+      "details": null
+    },
+    {
+      "name": "drop_injected",
+      "passed": true,
+      "at_utc": "2026-11-01T13:23:11.244749+00:00",
+      "details": null
+    },
+    {
+      "name": "critical_gap_alert_firing",
+      "passed": true,
+      "at_utc": "2026-11-01T13:23:11.266175+00:00",
+      "details": {
+        "at_utc": "2026-11-01T13:23:11.251566+00:00",
+        "up": 1.0,
+        "metrics": {
+          "feed_sequence_gaps_total": 1.0,
+          "feed_gap_recoveries_total": 0.0,
+          "feed_unresolved_gaps": 1.0
+        },
+        "alerts": {
+          "MarketDataFeedStale": {
+            "state": "inactive",
+            "health": "ok"
+          },
+          "MarketDataUnresolvedGap": {
+            "state": "firing",
+            "health": "ok"
+          },
+          "MarketDataExporterDown": {
+            "state": "inactive",
+            "health": "ok"
+          }
+        }
+      }
+    },
+    {
+      "name": "replay_sent",
+      "passed": true,
+      "at_utc": "2026-11-01T13:23:11.386043+00:00",
+      "details": null
+    },
+    {
+      "name": "gap_recovered_and_alert_resolved",
+      "passed": true,
+      "at_utc": "2026-11-01T13:23:17.424921+00:00",
+      "details": {
+        "at_utc": "2026-11-01T13:23:17.409993+00:00",
+        "up": 1.0,
+        "metrics": {
+          "feed_sequence_gaps_total": 1.0,
+          "feed_gap_recoveries_total": 1.0,
+          "feed_unresolved_gaps": 0.0
+        },
+        "alerts": {
+          "MarketDataFeedStale": {
+            "state": "pending",
+            "health": "ok"
+          },
+          "MarketDataUnresolvedGap": {
+            "state": "inactive",
+            "health": "ok"
+          },
+          "MarketDataExporterDown": {
+            "state": "inactive",
+            "health": "ok"
+          }
+        }
+      }
+    }
+  ],
+  "error": null,
+  "initial": {
+    "at_utc": "2026-11-01T13:22:41.066663+00:00",
+    "up": 1.0,
+    "metrics": {
+      "feed_sequence_gaps_total": 0.0,
+      "feed_gap_recoveries_total": 0.0,
+      "feed_unresolved_gaps": 0.0
+    },
+    "alerts": {
+      "MarketDataFeedStale": {
+        "state": "inactive",
+        "health": "ok"
+      },
+      "MarketDataUnresolvedGap": {
+        "state": "inactive",
+        "health": "ok"
+      },
+      "MarketDataExporterDown": {
+        "state": "inactive",
+        "health": "ok"
+      }
+    }
+  },
+  "sender": {
+    "command": [
+      "/usr/bin/python3",
+      "labs/market-data-network/feed_sender.py",
+      "--continuous",
+      "--rate",
+      "10",
+      "--duration",
+      "30",
+      "--drop-sequence",
+      "5"
+    ],
+    "returncode": 0,
+    "stdout": "SESSION_ID=e968508f-51b6-43da-a0c8-9cbb5b168ec9 rate=10.0 duration=30.0\nINJECTED_DROP seq=5\nPROGRESS attempted=10 sent=9\nPROGRESS attempted=20 sent=19\nPROGRESS attempted=30 sent=29\nPROGRESS attempted=40 sent=39\nPROGRESS attempted=50 sent=49\nPROGRESS attempted=60 sent=59\nPROGRESS attempted=70 sent=69\nPROGRESS attempted=80 sent=79\nPROGRESS attempted=90 sent=89\nPROGRESS attempted=100 sent=99\nPROGRESS attempted=110 sent=109\nPROGRESS attempted=120 sent=119\nPROGRESS attempted=130 sent=129\nPROGRESS attempted=140 sent=139\nPROGRESS attempted=150 sent=149\nPROGRESS attempted=160 sent=159\nPROGRESS attempted=170 sent=169\nPROGRESS attempted=180 sent=179\nPROGRESS attempted=190 sent=189\nPROGRESS attempted=200 sent=199\nPROGRESS attempted=210 sent=209\nPROGRESS attempted=220 sent=219\nPROGRESS attempted=230 sent=229\nPROGRESS attempted=240 sent=239\nPROGRESS attempted=250 sent=249\nPROGRESS attempted=260 sent=259\nPROGRESS attempted=270 sent=269\nPROGRESS attempted=280 sent=279\nPROGRESS attempted=290 sent=289\nPROGRESS attempted=300 sent=299\nSUMMARY session_id=e968508f-51b6-43da-a0c8-9cbb5b168ec9 attempted=300 sent=299 dropped=1 duplicated=0 reordered=0 elapsed=30.00s avg_tx_rate=9.97\n",
+    "stderr": ""
+  },
+  "gap_detected": {
+    "at_utc": "2026-11-01T13:23:11.251566+00:00",
+    "up": 1.0,
+    "metrics": {
+      "feed_sequence_gaps_total": 1.0,
+      "feed_gap_recoveries_total": 0.0,
+      "feed_unresolved_gaps": 1.0
+    },
+    "alerts": {
+      "MarketDataFeedStale": {
+        "state": "inactive",
+        "health": "ok"
+      },
+      "MarketDataUnresolvedGap": {
+        "state": "firing",
+        "health": "ok"
+      },
+      "MarketDataExporterDown": {
+        "state": "inactive",
+        "health": "ok"
+      }
+    }
+  },
+  "replay": {
+    "command": [
+      "/usr/bin/python3",
+      "labs/market-data-network/feed_sender.py",
+      "--replay",
+      "--session-id",
+      "e968508f-51b6-43da-a0c8-9cbb5b168ec9",
+      "--symbol",
+      "FAKE",
+      "--sequence",
+      "5"
+    ],
+    "returncode": 0,
+    "stdout": "REPLAY_SENT session_id=e968508f-51b6-43da-a0c8-9cbb5b168ec9 symbol=FAKE seq=5\n",
+    "stderr": ""
+  },
+  "recovered": {
+    "at_utc": "2026-11-01T13:23:17.409993+00:00",
+    "up": 1.0,
+    "metrics": {
+      "feed_sequence_gaps_total": 1.0,
+      "feed_gap_recoveries_total": 1.0,
+      "feed_unresolved_gaps": 0.0
+    },
+    "alerts": {
+      "MarketDataFeedStale": {
+        "state": "pending",
+        "health": "ok"
+      },
+      "MarketDataUnresolvedGap": {
+        "state": "inactive",
+        "health": "ok"
+      },
+      "MarketDataExporterDown": {
+        "state": "inactive",
+        "health": "ok"
+      }
+    }
+  },
+  "finished_at_utc": "2026-11-01T13:23:17.425000+00:00"
+}
