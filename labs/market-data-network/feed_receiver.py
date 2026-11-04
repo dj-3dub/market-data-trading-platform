@@ -33,6 +33,24 @@ def validate_tick(tick):
     return tick
 
 
+
+SESSION_TTL_SECONDS = 900
+MAINTENANCE_INTERVAL_SECONDS = 30
+
+
+def maintain_sessions(tracker, metrics, now=None):
+    """Expire resolved idle sessions and synchronize exporter metrics."""
+    expired = tracker.cleanup_expired(
+        ttl_seconds=SESSION_TTL_SECONDS,
+        now=now,
+    )
+
+    metrics.remove_sessions(expired)
+    metrics.set_active_sessions(len(tracker.sessions))
+
+    return expired
+
+
 def main():
     tracker = FeedIntegrityTracker()
     metrics = FeedMetrics()
@@ -49,11 +67,25 @@ def main():
         last_received = time.monotonic()
         stale = False
         seen_packet = False
+        last_maintenance = time.monotonic()
 
         print(f"Listening on {GROUP}:{PORT} via {INTERFACE}", flush=True)
         print("Metrics endpoint: http://127.0.0.1:9108/metrics", flush=True)
 
         while True:
+            now = time.monotonic()
+
+            if now - last_maintenance >= MAINTENANCE_INTERVAL_SECONDS:
+                expired = maintain_sessions(tracker, metrics, now=now)
+                last_maintenance = now
+
+                if expired:
+                    print(
+                        f"MAINTENANCE: expired={len(expired)} "
+                        f"active={len(tracker.sessions)}",
+                        flush=True,
+                    )
+
             try:
                 payload, address = sock.recvfrom(65535)
             except socket.timeout:
@@ -75,6 +107,8 @@ def main():
                     len(state.missing) for state in tracker.sessions.values()
                 )
                 metrics.record(status, total_unresolved)
+                metrics.set_session_gaps(session, symbol, len(gaps))
+                metrics.set_active_sessions(len(tracker.sessions))
             except (ValueError, KeyError, TypeError, UnicodeDecodeError, OverflowError) as exc:
                 metrics.invalid()
                 print(f"INVALID: {exc}", flush=True)
