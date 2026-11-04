@@ -24,11 +24,14 @@ queries and the final live pipeline check passed. Local suites passed 30 Python
 and 18 C# tests. See [validation evidence and limits](docs/testing/priority-2-validation.md)
 and the [Priority 2 runbook](docs/operations/priority-2.md).
 
-Cockpit users can map Prometheus to another host port:
 
-```bash
-PROMETHEUS_PORT=9091 make priority2-acceptance
-```
+---
+
+## Automated Incident Validation
+
+The platform includes automated sequence-gap and stale-feed incident exercises, with Prometheus alert verification, recovery checks, and JSON evidence.
+
+See the [incident-validation guide](docs/reliability/incident-validation.md) for commands, validated results, and known limitations.
 
 ---
 

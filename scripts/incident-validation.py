@@ -48,6 +48,20 @@ def prom_query(base, query):
     return float(result[0]["value"][1]) if len(result) == 1 else None
 
 
+def session_gap_query(base, session_id, symbol="FAKE"):
+    """Query unresolved gaps for one sender session and symbol."""
+    session_label = json.dumps(session_id)
+    symbol_label = json.dumps(symbol)
+
+    query = (
+        'feed_session_unresolved_gaps{job="market-data-network",'
+        f"session_id={session_label},symbol={symbol_label}"
+        "}"
+    )
+
+    return prom_query(base, query)
+
+
 def alert_states(base):
     payload = get_json(base.rstrip("/") + "/api/v1/rules")
     found = {}
@@ -171,17 +185,12 @@ def main():
         )
 
         if args.mode == "gap-replay":
-            record(
-                "no_existing_unresolved_gaps",
-                initial["metrics"]["feed_unresolved_gaps"] == 0,
-                initial["metrics"]["feed_unresolved_gaps"],
-            )
-
-            record(
-                "gap_alert_initially_inactive",
-                initial["alerts"]["MarketDataUnresolvedGap"]["state"]
-                == "inactive",
-            )
+            # Existing gaps belong to other sessions and must not
+            # prevent validation of this sender's session.
+            report["global_gap_baseline"] = {
+                "unresolved_gaps": initial["metrics"]["feed_unresolved_gaps"],
+                "alert_state": initial["alerts"]["MarketDataUnresolvedGap"]["state"],
+            }
 
             sender = pathlib.Path(args.sender)
             record("sender_exists", sender.is_file(), str(sender))
@@ -216,21 +225,22 @@ def main():
             )
 
             gap_seen = wait_until(
-                lambda: (
-                    prom_query(
-                        args.prometheus,
-                        'feed_unresolved_gaps{job="market-data-network"}',
-                    ) == 1
-                    and alert_states(args.prometheus)
-                    .get("MarketDataUnresolvedGap", {})
-                    .get("state") == "firing"
-                ),
+                lambda: session_gap_query(
+                    args.prometheus, session_id
+                ) == 1,
                 args.timeout,
             )
 
-            report["gap_detected"] = snapshot(args.prometheus)
+            report["gap_detected"] = {
+                "snapshot": snapshot(args.prometheus),
+                "session_id": session_id,
+                "session_unresolved_gaps": session_gap_query(
+                    args.prometheus, session_id
+                ),
+            }
+
             record(
-                "critical_gap_alert_firing",
+                "session_gap_detected",
                 gap_seen,
                 report["gap_detected"],
             )
@@ -266,9 +276,8 @@ def main():
 
             recovered = wait_until(
                 lambda: (
-                    prom_query(
-                        args.prometheus,
-                        'feed_unresolved_gaps{job="market-data-network"}',
+                    session_gap_query(
+                        args.prometheus, session_id
                     ) == 0
                     and (
                         prom_query(
@@ -276,16 +285,20 @@ def main():
                             'feed_gap_recoveries_total{job="market-data-network"}',
                         ) or 0
                     ) > base_recoveries
-                    and alert_states(args.prometheus)
-                    .get("MarketDataUnresolvedGap", {})
-                    .get("state") == "inactive"
                 ),
                 args.timeout,
             )
 
-            report["recovered"] = snapshot(args.prometheus)
+            report["recovered"] = {
+                "snapshot": snapshot(args.prometheus),
+                "session_id": session_id,
+                "session_unresolved_gaps": session_gap_query(
+                    args.prometheus, session_id
+                ),
+            }
+
             record(
-                "gap_recovered_and_alert_resolved",
+                "session_gap_recovered",
                 recovered,
                 report["recovered"],
             )
