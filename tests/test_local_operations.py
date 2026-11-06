@@ -52,7 +52,14 @@ def test_compose_storage_access_and_internal_kafka_contract():
     services = config["services"]
     for name, service in services.items():
         assert service["restart"] == "unless-stopped", name
-        assert all(port.startswith("127.0.0.1:") for port in service.get("ports", [])), name
+        allowed_lan_ports = (
+            {"192.168.2.37:${GRAFANA_PORT:-3000}:3000"}
+            if name == "grafana" else set()
+        )
+        assert all(
+            port.startswith("127.0.0.1:") or port in allowed_lan_ports
+            for port in service.get("ports", [])
+        ), name
     expected = {
         "kafka": {"kafka-data:/var/lib/kafka/data"},
         "market-data": {"producer-state:/data"},

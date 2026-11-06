@@ -11,6 +11,11 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse, Response
 from kafka import KafkaProducer
 from prometheus_client import Counter, Histogram, CONTENT_TYPE_LATEST, generate_latest
+# Support package imports in Docker and standalone imports in contract tests.
+if __package__:
+    from .otel_tracing import configure_tracing, publish_tick_with_trace
+else:
+    from otel_tracing import configure_tracing, publish_tick_with_trace
 
 # Works both in the image package and the import-based host contract tests.
 try:
@@ -68,8 +73,11 @@ def publish_loop():
                         acks="all", max_block_ms=3000, request_timeout_ms=3000,
                         max_in_flight_requests_per_connection=1,
                     )
-                producer.send(os.getenv("KAFKA_TICKS_TOPIC", "ticks-v1"),
-                              key=tick["symbol"], value=tick).get(timeout=5)
+                publish_tick_with_trace(
+                    producer,
+                    os.getenv("KAFKA_TICKS_TOPIC", "ticks-v1"),
+                    tick,
+                )
             except Exception:
                 errors.inc()
                 log.exception("Kafka publication failed; exact pending tick will be retried")
@@ -99,6 +107,7 @@ def publish_loop():
 async def lifespan(app):
     global worker_failure
     worker_failure = None
+    configure_tracing()
     stop.clear()
     worker = Thread(target=publish_loop, daemon=True)
     worker.start()
