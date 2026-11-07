@@ -1,9 +1,31 @@
 using System.Text.Json;
+using System.Diagnostics;
+using System.Text;
+using OpenTelemetry;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Exporter;
 using Confluent.Kafka;
 using Prometheus;
 
 if (args.Contains("--replay")) return ReplayRunner.Run(args);
 var builder = WebApplication.CreateBuilder(args);
+var tracingEnabled = string.Equals(
+    Environment.GetEnvironmentVariable("OTEL_TRACES_ENABLED"), "true",
+    StringComparison.OrdinalIgnoreCase);
+using var activitySource = new ActivitySource("MarketData.StrategyEngine");
+using var tracerProvider = tracingEnabled
+    ? Sdk.CreateTracerProviderBuilder()
+        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(
+            Environment.GetEnvironmentVariable("OTEL_SERVICE_NAME") ?? "strategy-engine"))
+        .AddSource("MarketData.StrategyEngine")
+        .AddOtlpExporter(options => {
+            options.Protocol = OtlpExportProtocol.HttpProtobuf;
+            options.Endpoint = new Uri(Environment.GetEnvironmentVariable(
+                "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") ?? "http://alloy:4318/v1/traces");
+        })
+        .Build()
+    : null;
 var app = builder.Build();
 var symbols = (Environment.GetEnvironmentVariable("MARKET_SYMBOLS") ?? "FAKE,FAKE2,FAKE3").Split(',');
 if (symbols.Length != symbols.Distinct().Count() || symbols.Any(s => !System.Text.RegularExpressions.Regex.IsMatch(s, "^FAKE[0-9]*$")))
@@ -67,6 +89,25 @@ var consumerTask = Task.Run(() => {
                 Console.Error.WriteLine(JsonSerializer.Serialize(new { component="consumer", error=error.Error.Reason }));
                 continue;
             }
+            ActivityContext parentContext = default;
+            if (tracingEnabled && record.Message.Headers is { } headers) {
+                if (headers.TryGetLastBytes("traceparent", out var rawParent)
+                    && rawParent is { Length: > 0 }) {
+                    var traceparent = Encoding.UTF8.GetString(rawParent);
+                    string? tracestate = null;
+                    if (headers.TryGetLastBytes("tracestate", out var rawState)
+                        && rawState is { Length: > 0 })
+                        tracestate = Encoding.UTF8.GetString(rawState);
+                    ActivityContext.TryParse(traceparent, tracestate, out parentContext);
+                }
+            }
+            using var consumerSpan = tracingEnabled
+                ? activitySource.StartActivity("kafka process tick", ActivityKind.Consumer, parentContext)
+                : null;
+            consumerSpan?.SetTag("messaging.system", "kafka");
+            consumerSpan?.SetTag("messaging.destination.name", record.Topic);
+            consumerSpan?.SetTag("messaging.kafka.partition", record.Partition.Value);
+            consumerSpan?.SetTag("messaging.kafka.offset", record.Offset.Value);
             var timer = System.Diagnostics.Stopwatch.StartNew();
             var crashEvent = Environment.GetEnvironmentVariable("STRATEGY_CRASH_EVENT_ID");
             var crashBefore = Environment.GetEnvironmentVariable("STRATEGY_CRASH_BOUNDARY") == "before";
@@ -81,6 +122,8 @@ var consumerTask = Task.Run(() => {
             }
             var result = store.Process(record.Topic, record.Partition.Value, record.Offset.Value,
                 record.Message.Key, record.Message.Value ?? "null", Now(), beforeCommit);
+            consumerSpan?.SetTag("mdp.processing.outcome", result.Outcome);
+            consumerSpan?.SetTag("mdp.simulated_buy", result.Trade);
             if (result.Outcome != "offset-replay") {
                 var current = result.State;
                 tickCounter.IncTo(current.Accepted); tradeCounter.IncTo(current.Trades); errorCounter.IncTo(current.Quarantined);
@@ -94,7 +137,10 @@ var consumerTask = Task.Run(() => {
             if (!crashBefore && crashEvent is not null && result.Tick?.event_id == crashEvent && result.Outcome == "accepted")
                 CrashOnce(crashEvent);
             try { consumer.Commit(record); }
-            catch (KafkaException) { commitErrors.Inc(); throw; }
+            catch (KafkaException error) {
+                consumerSpan?.SetStatus(ActivityStatusCode.Error, error.Message);
+                commitErrors.Inc(); throw;
+            }
             Console.WriteLine(JsonSerializer.Serialize(new { eventId=result.Tick?.event_id, symbol=result.Tick?.symbol,
                 topic=record.Topic, partition=record.Partition.Value, offset=record.Offset.Value,
                 outcome=result.Outcome, simulatedBuy=result.Trade }));

@@ -1,0 +1,42 @@
+# Additive overlay: use with the existing docker-compose.yml.
+services:
+  tempo:
+    image: grafana/tempo:3.1.1
+    container_name: mdp-tempo
+    command:
+      - '-config.file=/etc/tempo/tempo.yaml'
+      - '-target=all'
+    # Local development only: make a new Docker-managed volume writable.
+    # Replace this with a non-root UID / pre-owned data directory for production.
+    user: '0:0'
+    volumes:
+      - ./monitoring/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    restart: unless-stopped
+    networks:
+      - trading-net
+
+  alloy:
+    image: grafana/alloy:v1.21.3
+    container_name: mdp-alloy
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - '--server.http.listen-addr=0.0.0.0:12345'
+      - '--storage.path=/var/lib/alloy/data'
+    volumes:
+      - ./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy-data:/var/lib/alloy/data
+    ports:
+      - '127.0.0.1:${ALLOY_OTLP_GRPC_PORT:-4317}:4317'
+      - '127.0.0.1:${ALLOY_OTLP_HTTP_PORT:-4318}:4318'
+      - '127.0.0.1:${ALLOY_UI_PORT:-12345}:12345'
+    depends_on:
+      - tempo
+    restart: unless-stopped
+    networks:
+      - trading-net
+
+volumes:
+  tempo-data:
+  alloy-data:
