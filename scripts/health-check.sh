@@ -122,6 +122,9 @@ else
     [ -z "$job" ] && continue
     if [ "$health" = "up" ]; then
       record PASS "$job" "$url"
+    elif [ "$job" = "market-data-network" ] \
+         && [ "${REQUIRE_MARKET_DATA_NETWORK:-false}" != "true" ]; then
+      record SKIP "$job" "$url is down (optional manually started receiver)"
     elif [ "$url" = "http://host.docker.internal:8001/metrics" ] \
          || [ "$url" = "http://wacker-watch:8001/metrics" ]; then
       # one of the two agent paths is up whenever the other is
