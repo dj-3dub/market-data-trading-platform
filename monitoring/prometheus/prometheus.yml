@@ -42,17 +42,13 @@ scrape_configs:
           component: multicast-feed
           environment: homelab
 
-  # Wacker-Watch eBPF off-CPU duration agent.
-  # The agent can run two ways, so both are scraped:
-  #   wacker-watch:8001          -> agent running as a container on trading-net
-  #                                 (make agent-up)
-  #   host.docker.internal:8001  -> agent running natively on the Docker host
-  #                                 (make agent-run, the recommended path)
-  # Whichever target is not in use simply reports as down.
+  # ---------------------------------------------------------
+  # Wacker-Watch: containerized eBPF telemetry
+  # ---------------------------------------------------------
   - job_name: "wacker-watch"
     metrics_path: /metrics
     honor_labels: true
     static_configs:
-      - targets: ["wacker-watch:8001", "host.docker.internal:8001"]
+      - targets: ["wacker-watch:8001"]
         labels:
           signal: kernel-off-cpu
