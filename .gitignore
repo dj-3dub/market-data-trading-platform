@@ -34,3 +34,7 @@ artifacts/
 !.env.example
 .pytest_cache/
 state-backup/
+
+# Python generated files
+__pycache__/
+*.pyc
