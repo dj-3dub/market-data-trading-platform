@@ -31,3 +31,35 @@ groups:
         annotations:
           summary: 'Sequence recovery is required for {{ $labels.symbol }}'
           runbook: docs/operations/priority-2.md
+
+  - name: market-data-feed-reliability
+    rules:
+      - alert: MarketDataFeedStale
+        expr: feed_stale{job="market-data-network"} == 1
+        for: 5s
+        labels:
+          severity: warning
+          component: multicast-feed
+        annotations:
+          summary: "Market-data multicast feed is stale"
+          description: "No valid market-data packets have been received within the receiver's stale threshold."
+
+      - alert: MarketDataUnresolvedGap
+        expr: feed_unresolved_gaps{job="market-data-network"} > 0
+        for: 10s
+        labels:
+          severity: critical
+          component: multicast-feed
+        annotations:
+          summary: "Unresolved market-data sequence gap detected"
+          description: "One or more missing market-data sequences remain unresolved."
+
+      - alert: MarketDataExporterDown
+        expr: up{job="market-data-network"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          component: multicast-feed
+        annotations:
+          summary: "Market-data feed metrics exporter is unreachable"
+          description: "Prometheus cannot scrape the multicast feed receiver metrics endpoint."
